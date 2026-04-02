@@ -15,13 +15,13 @@ spec:
       - path: environments/*/apps/public-website.yaml
   template:
     metadata:
-      name: "public-website-{{path[11]}}"
+      name: "public-website-{{path.basename}}"
     spec:
       project: public
       source:
         repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
         targetRevision: HEAD
-        path: environments/{{path}}/apps/public-website.yaml
+        path: "environments/{{path.basename}}/apps/public-website.yaml"
       destination:
         server: https://kubernetes.default.svc
         namespace: ethio-connect-public

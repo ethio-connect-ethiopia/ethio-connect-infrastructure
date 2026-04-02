@@ -15,13 +15,13 @@ spec:
       - path: environments/*/apps/central-hub-dashboard.yaml
   template:
     metadata:
-      name: "central-hub-dashboard-{{path[11]}}"
+      name: "central-hub-dashboard-{{path.basename}}"
     spec:
       project: central
       source:
         repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
         targetRevision: HEAD
-        path: environments/{{path}}/apps/central-hub-dashboard.yaml
+        path: "environments/{{path.basename}}/apps/central-hub-dashboard.yaml"
       destination:
         server: https://kubernetes.default.svc
         namespace: ethio-connect-central
