@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/ethio-connect-ethiopia/central-hub-api
-  tag: "testing-b7e6092a569c"
+  tag: "testing"
   pullPolicy: IfNotPresent
 
 ingress:
@@ -10,22 +10,13 @@ ingress:
     cert-manager.io/cluster-issuer: ca-issuer
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-  hosts:
-    - host: testing-hub-api.ethioconnect.et
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: central-hub-api-tls
-      hosts:
-        - testing-hub-api.ethioconnect.et
 
 resources:
   requests:
-    cpu: 50m
-    memory: 64Mi
+    cpu: 10m
+    memory: 32Mi
   limits:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 100m
+    memory: 128Mi
 
 replicaCount: 1

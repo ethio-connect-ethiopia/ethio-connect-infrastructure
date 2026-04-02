@@ -83,3 +83,13 @@ ingress:
     - secretName: client-api-server-tls
       hosts:
         - testing-client-api.ethioconnect.et
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+replicaCount: 1

@@ -57,9 +57,8 @@ env:
 ingress:
   annotations:
     cert-manager.io/cluster-issuer: ca-issuer
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
   hosts:
     - host: staging-vendor.ethioconnect.et
       paths:
@@ -69,3 +68,13 @@ ingress:
     - secretName: staging-vendor-dashboard-tls
       hosts:
         - staging-vendor.ethioconnect.et
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+replicaCount: 1
