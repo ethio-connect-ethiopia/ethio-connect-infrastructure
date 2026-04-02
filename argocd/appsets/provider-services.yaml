@@ -1,49 +1,29 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: provider-services
+  name: vendor-services
   namespace: argocd
   labels:
-    app.kubernetes.io/name: provider-services
-    app.kubernetes.io/part-of: ethio-connect
+    app.kubernetes.io/name: vendor-services
     ethio-connect/project: provider
 spec:
   generators:
-  - matrix:
-      generators:
-      - clusters:
-          values:
-            metadata:
-              name: "{{ name }}"
-              labels:
-                environment: "{{ metadata.labels.environment }}"
-        selector:
-          matchLabels:
-            kubernetes.io/cluster: managed
-      - git:
-          repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
-          revision: HEAD
-          directories:
-          - path: environments/*/apps/vendor-api-server.yaml
-          - path: environments/*/apps/vendor-web-dashboard.yaml
-          values:
-            environment: "{{ path[11] }}"
-            appName: "{{ path.basename }}"
+  - git:
+      repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+      revision: HEAD
+      directories:
+      - path: environments/*/apps/vendor-*.yaml
   template:
     metadata:
-      name: "{{ values.appName }}-{{ values.environment }}"
-      labels:
-        app.kubernetes.io/name: "{{ values.appName }}"
-        ethio-connect/project: provider
-        ethio-connect/environment: "{{ values.environment }}"
+      name: "vendor-{{path.basename}}-{{path[11]}}"
     spec:
       project: provider
       source:
         repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
-        targetRevision: "{{ values.metadata.labels.environment }}"
-        path: environments/{{ values.environment }}/apps/{{ values.appName }}.yaml
+        targetRevision: HEAD
+        path: environments/{{path}}
       destination:
-        server: "{{ values.metadata.name }}"
+        server: https://kubernetes.default.svc
         namespace: ethio-connect-provider
       syncPolicy:
         automated:
@@ -51,5 +31,3 @@ spec:
           selfHeal: true
         syncOptions:
         - CreateNamespace=true
-        - PrunePropagationPolicy=foreground
-      revisionHistoryLimit: 10

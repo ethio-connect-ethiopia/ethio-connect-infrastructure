@@ -46,8 +46,8 @@ spec:
     - p, role:central-readonly, applications, get, */*, allow
     groups:
     - developers@ethioconnect.et
-  syncWindow:
-    kind: allow
+  syncWindows:
+  - kind: allow
     schedule: "* * * * *"
     duration: 1h
     applications:
