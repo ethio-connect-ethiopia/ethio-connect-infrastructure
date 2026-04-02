@@ -20,7 +20,7 @@ spec:
       - path: environments/prod/apps/vendor-web-dashboard.yaml
   template:
     metadata:
-      name: "vendor-{{path.basename}}"
+      name: "vendor-{{path[1]}}-{{path.filename}}"
     spec:
       project: provider
       source:

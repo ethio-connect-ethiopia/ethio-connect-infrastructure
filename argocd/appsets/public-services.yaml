@@ -17,7 +17,7 @@ spec:
       - path: environments/prod/apps/public-website.yaml
   template:
     metadata:
-      name: "public-website-{{path.basename}}"
+      name: "public-website-{{path[1]}}"
     spec:
       project: public
       source:

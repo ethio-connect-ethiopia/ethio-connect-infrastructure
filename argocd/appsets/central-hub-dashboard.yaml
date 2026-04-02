@@ -17,7 +17,7 @@ spec:
       - path: environments/prod/apps/central-hub-dashboard.yaml
   template:
     metadata:
-      name: "central-hub-dashboard-{{path.basename}}"
+      name: "central-hub-dashboard-{{path[1]}}"
     spec:
       project: central
       source:
