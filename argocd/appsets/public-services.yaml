@@ -21,10 +21,13 @@ spec:
       name: "public-website-{{env}}"
     spec:
       project: public
-      source:
+      sources:
+      - chart: ethio-connect-app
         repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
         targetRevision: HEAD
-        path: "{{path}}"
+        helm:
+          valueFiles:
+          - "{{path}}"
       destination:
         server: https://kubernetes.default.svc
         namespace: ethio-connect-public
