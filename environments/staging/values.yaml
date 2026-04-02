@@ -6,23 +6,15 @@ image:
 ingress:
   annotations:
     cert-manager.io/cluster-issuer: ca-issuer
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-  hosts:
-    - host: staging-hub-api.ethioconnect.et
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: staging-hub-api-tls
-      hosts:
-        - staging-hub-api.ethioconnect.et
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 
 resources:
   requests:
-    cpu: 50m
-    memory: 64Mi
+    cpu: 10m
+    memory: 32Mi
   limits:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 100m
+    memory: 128Mi
+
+replicaCount: 1
