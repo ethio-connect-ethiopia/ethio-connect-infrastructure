@@ -1,0 +1,17 @@
+nameOverride: central-hub-dashboard
+image:
+  repository: ghcr.io/primewale/central-hub-dashboard
+  tag: "development"
+envFrom:
+  configMaps: []
+  secrets: []
+ingress:
+  hosts:
+    - host: dev-hub.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - dev-hub.ethioconnect.et

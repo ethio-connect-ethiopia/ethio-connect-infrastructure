@@ -1,0 +1,17 @@
+nameOverride: public-website
+image:
+  repository: ghcr.io/primewale/public-website
+  tag: "development"
+envFrom:
+  configMaps: []
+  secrets: []
+ingress:
+  hosts:
+    - host: dev.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - dev.ethioconnect.et

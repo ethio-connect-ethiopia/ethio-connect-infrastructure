@@ -1,0 +1,34 @@
+nameOverride: public-website
+image:
+  repository: ghcr.io/primewale/public-website
+  tag: "testing-990ec590617a"
+envFrom:
+  configMaps: []
+  secrets: []
+env:
+  - name: NODE_ENV
+    value: "test"
+  - name: APP_ENV
+    value: "testing"
+  - name: APP_NAME
+    value: "@ethio-connect/public-website"
+  - name: APP_PORT
+    value: "3000"
+  - name: APP_BASE_URL
+    value: "https://testing.ethioconnect.et"
+  - name: NEXT_PUBLIC_APP_NAME
+    value: "@ethio-connect/public-website"
+  - name: NEXT_PUBLIC_APP_URL
+    value: "https://testing.ethioconnect.et"
+  - name: NEXT_PUBLIC_ENVIRONMENT
+    value: "testing"
+ingress:
+  hosts:
+    - host: testing.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - testing.ethioconnect.et

@@ -1,0 +1,66 @@
+nameOverride: client-web-dashboard
+image:
+  repository: ghcr.io/primewale/client-web-dashboard
+  tag: "testing-990ec590617a"
+envFrom:
+  secrets:
+    - ethio-connect-runtime-secrets
+env:
+  - name: NODE_ENV
+    value: "test"
+  - name: APP_ENV
+    value: "testing"
+  - name: APP_NAME
+    value: "@ethio-connect/client-web-dashboard"
+  - name: APP_PORT
+    value: "3004"
+  - name: APP_BASE_URL
+    value: "https://testing-client.ethioconnect.et"
+  - name: NEXTAUTH_URL
+    value: "https://testing-client.ethioconnect.et"
+  - name: NEXT_PUBLIC_APP_NAME
+    value: "@ethio-connect/client-web-dashboard"
+  - name: NEXT_PUBLIC_APP_URL
+    value: "https://testing-client.ethioconnect.et"
+  - name: NEXT_PUBLIC_ENVIRONMENT
+    value: "testing"
+  - name: NEXT_PUBLIC_API_URL
+    value: "https://testing-client-api.ethioconnect.et/api"
+  - name: NEXT_PUBLIC_APP_VERSION
+    value: "0.1.0-test"
+  - name: NEXT_PUBLIC_AUTH_CLIENT_ID
+    value: "test-client-id"
+  - name: NEXT_PUBLIC_AUTH_ISSUER
+    value: "https://testing-hub-api.ethioconnect.et"
+  - name: NEXT_PUBLIC_AUTH_REDIRECT_URI
+    value: "https://testing-client.ethioconnect.et/api/auth/callback"
+  - name: LOG_LEVEL
+    value: "error"
+  - name: ENABLE_DEBUG_LOGS
+    value: "false"
+  - name: ENABLE_REQUEST_LOGGING
+    value: "false"
+  - name: NEXT_PUBLIC_SENTRY_DSN
+    value: ""
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: ""
+  - name: JWT_EXPIRES_IN
+    value: "1h"
+  - name: CORS_ORIGINS
+    value: "https://testing-client.ethioconnect.et,https://testing-client-api.ethioconnect.et"
+  - name: API_TIMEOUT_MS
+    value: "5000"
+  - name: FEATURE_FLAGS
+    value: "core_dashboard,notifications"
+  - name: NEXT_PUBLIC_APP_COMMIT_SHA
+    value: "test"
+ingress:
+  hosts:
+    - host: testing-client.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - testing-client.ethioconnect.et

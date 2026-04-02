@@ -1,0 +1,19 @@
+nameOverride: central-hub-api
+image:
+  repository: ghcr.io/primewale/central-hub-api
+  tag: "staging"
+envFrom:
+  configMaps:
+    - ethio-connect-runtime-config
+  secrets:
+    - ethio-connect-runtime-secrets
+ingress:
+  hosts:
+    - host: staging-hub-api.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - staging-hub-api.ethioconnect.et

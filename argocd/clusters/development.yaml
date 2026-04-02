@@ -1,0 +1,6 @@
+environment: development
+clusterName: core-development
+clusterServer: https://kubernetes.default.svc
+targetRevision: development
+sharedNamespace: ethio-connect-development
+platformNamespace: ethio-connect-development

@@ -1,0 +1,6 @@
+environment: testing
+clusterName: core-testing
+clusterServer: https://kubernetes.default.svc
+targetRevision: testing
+sharedNamespace: ethio-connect-testing
+platformNamespace: ethio-connect-testing

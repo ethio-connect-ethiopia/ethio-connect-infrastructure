@@ -1,0 +1,17 @@
+nameOverride: vendor-web-dashboard
+image:
+  repository: ghcr.io/primewale/vendor-web-dashboard
+  tag: "development"
+envFrom:
+  configMaps: []
+  secrets: []
+ingress:
+  hosts:
+    - host: dev-vendor.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - dev-vendor.ethioconnect.et

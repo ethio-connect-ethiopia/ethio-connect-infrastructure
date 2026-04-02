@@ -1,0 +1,81 @@
+nameOverride: client-api-server
+image:
+  repository: ghcr.io/primewale/client-api-server
+  tag: "last"
+envFrom:
+  configMaps:
+    - ethio-connect-runtime-config
+  secrets:
+    - ethio-connect-runtime-secrets
+env:
+  - name: NODE_ENV
+    value: "production"
+  - name: APP_ENV
+    value: "production"
+  - name: APP_NAME
+    value: "@ethio-connect/client-api-server"
+  - name: APP_VERSION
+    value: "1.0.0"
+  - name: APP_HOST
+    value: "0.0.0.0"
+  - name: APP_PORT
+    value: "4002"
+  - name: PORT
+    value: "4002"
+  - name: API_PREFIX
+    value: "api"
+  - name: APP_BASE_URL
+    value: "https://client-api.ethioconnect.et"
+  - name: APP_TRUST_PROXY
+    value: "false"
+  - name: APP_COMPRESSION_ENABLED
+    value: "true"
+  - name: DEBUG
+    value: "false"
+  - name: LOG_LEVEL
+    value: "debug"
+  - name: LOG_PRETTY
+    value: "false"
+  - name: ENABLE_DEBUG_LOGS
+    value: "true"
+  - name: ENABLE_REQUEST_LOGGING
+    value: "true"
+  - name: CENTRAL_HUB_API_URL
+    value: "https://hub-api.ethioconnect.et"
+  - name: CENTRAL_HUB_API_VERSION
+    value: "1"
+  - name: CENTRAL_HUB_API_TIMEOUT_MS
+    value: "10000"
+  - name: CENTRAL_SERVICE_CLIENT_ID
+    value: "client-api-server"
+  - name: CENTRAL_SERVICE_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: ethio-connect-runtime-secrets
+        key: CLIENT_API_SERVICE_CLIENT_SECRET
+  - name: SWAGGER_ENABLE
+    value: "true"
+  - name: SWAGGER_TITLE
+    value: "EthioConnect Client API"
+  - name: SWAGGER_DESCRIPTION
+    value: "Client platform API documentation for tenant-facing workflows, customer operations, and internal client services."
+  - name: SWAGGER_VERSION
+    value: "1.0.0"
+  - name: SWAGGER_PATH
+    value: "docs"
+  - name: NEXT_PUBLIC_APP_NAME
+    value: "@ethio-connect/client-api-server"
+  - name: NEXT_PUBLIC_API_BASE_URL
+    value: "https://client-api.ethioconnect.et/api"
+  - name: NEXT_PUBLIC_ENVIRONMENT
+    value: "production"
+ingress:
+  hosts:
+    - host: client-api.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - client-api.ethioconnect.et

@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: central
+  namespace: argocd
+spec:
+  description: Central shared applications across clusters and environments.
+  sourceRepos:
+    - https://github.com/PrimeWale/ethio-connect.git
+  destinations:
+    - server: '*'
+      namespace: ethio-connect-*
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

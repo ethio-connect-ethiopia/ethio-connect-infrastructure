@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ethio-connect-runtime-config
+data:
+  APP_ENV: production
+  APP_HOST: 0.0.0.0
+  APP_PORT: "3000"
+  PORT: "3000"
+  DB_EC_TYPE: postgres
+  DB_EC_HOST: postgres
+  DB_EC_PORT: "5432"
+  DB_EC_NAME: ethioconnect
+  DB_MOR_TYPE: postgres
+  DB_MOR_HOST: postgres
+  DB_MOR_PORT: "5432"
+  DB_MOR_NAME: analytics
+  DB_MONGO_URL: mongodb://mongodb:27017
+  DB_MONGO_DB: ethioconnect-central
+  DB_REDIS_HOST: redis
+  DB_REDIS_PORT: "6379"

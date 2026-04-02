@@ -1,0 +1,6 @@
+environment: staging
+clusterName: core-staging
+clusterServer: https://kubernetes.default.svc
+targetRevision: staging
+sharedNamespace: ethio-connect-staging
+platformNamespace: ethio-connect-staging

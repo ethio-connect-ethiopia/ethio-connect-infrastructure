@@ -1,0 +1,19 @@
+nameOverride: central-hub-api
+image:
+  repository: ghcr.io/primewale/central-hub-api
+  tag: "testing-990ec590617a"
+envFrom:
+  configMaps:
+    - ethio-connect-runtime-config
+  secrets:
+    - ethio-connect-runtime-secrets
+ingress:
+  hosts:
+    - host: testing-hub-api.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - testing-hub-api.ethioconnect.et

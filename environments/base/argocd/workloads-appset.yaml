@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: ethio-connect-workloads
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/PrimeWale/ethio-connect.git
+              revision: HEAD
+              files:
+                - path: libs/infrastructure/argocd/clusters/*.yaml
+          - git:
+              repoURL: https://github.com/PrimeWale/ethio-connect.git
+              revision: HEAD
+              files:
+                - path: libs/infrastructure/argocd/projects/*.yaml
+  template:
+    metadata:
+      name: '{{.projectKey}}-{{.environment}}-{{.clusterName}}'
+      namespace: argocd
+    spec:
+      project: '{{.argoProject}}'
+      source:
+        repoURL: https://github.com/PrimeWale/ethio-connect.git
+        targetRevision: '{{.targetRevision}}'
+        path: libs/infrastructure/charts/ethio-connect-app
+        helm:
+          releaseName: '{{.projectKey}}'
+          valueFiles:
+            - '../../environments/{{.environment}}/values.yaml'
+            - '../../environments/{{.environment}}/apps/{{.projectKey}}.yaml'
+      destination:
+        server: '{{.clusterServer}}'
+        namespace: '{{.sharedNamespace}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

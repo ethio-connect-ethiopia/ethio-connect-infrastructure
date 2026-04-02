@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-core
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - git:
+        repoURL: https://github.com/PrimeWale/ethio-connect.git
+        revision: HEAD
+        files:
+          - path: libs/infrastructure/argocd/clusters/*.yaml
+  template:
+    metadata:
+      name: 'platform-core-{{.environment}}-{{.clusterName}}'
+      namespace: argocd
+    spec:
+      project: platform
+      source:
+        repoURL: https://github.com/PrimeWale/ethio-connect.git
+        path: 'libs/infrastructure/environments/{{.environment}}/platform-core'
+        targetRevision: '{{.targetRevision}}'
+      destination:
+        server: '{{.clusterServer}}'
+        namespace: '{{.platformNamespace}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

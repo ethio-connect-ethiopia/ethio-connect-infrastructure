@@ -1,0 +1,54 @@
+{
+  "name": "@ethio-connect/infrastructure",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/infrastructure",
+  "targets": {
+    "bootstrap-gitops": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["node libs/infrastructure/scripts/apply-kustomization.mjs libs/infrastructure/environments/base"],
+        "parallel": false
+      }
+    },
+    "bootstrap-cluster-services": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["node libs/infrastructure/scripts/apply-kustomization.mjs libs/infrastructure/cluster-services"],
+        "parallel": false
+      }
+    },
+    "status": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "kubectl get applications.argoproj.io -n argocd",
+          "kubectl get applicationsets.argoproj.io -n argocd",
+          "kubectl get appprojects.argoproj.io -n argocd",
+          "kubectl get pods -n argocd"
+        ],
+        "parallel": false
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "node libs/infrastructure/scripts/validate-helm.mjs",
+          "node libs/infrastructure/scripts/validate-kustomizations.mjs libs/infrastructure/cluster-services libs/infrastructure/environments/base libs/infrastructure/environments/base/platform-core libs/infrastructure/environments/development/platform-core libs/infrastructure/environments/testing/platform-core libs/infrastructure/environments/staging/platform-core libs/infrastructure/environments/prod/platform-core"
+        ],
+        "parallel": false
+      }
+    },
+    "validate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "node libs/infrastructure/scripts/validate-helm.mjs",
+          "node libs/infrastructure/scripts/validate-kustomizations.mjs libs/infrastructure/cluster-services libs/infrastructure/environments/base libs/infrastructure/environments/base/platform-core libs/infrastructure/environments/development/platform-core libs/infrastructure/environments/testing/platform-core libs/infrastructure/environments/staging/platform-core libs/infrastructure/environments/prod/platform-core"
+        ],
+        "parallel": false
+      }
+    }
+  }
+}

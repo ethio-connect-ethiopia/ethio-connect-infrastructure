@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tenant
+  namespace: argocd
+spec:
+  description: Tenant-facing shared runtimes and future per-tenant workloads.
+  sourceRepos:
+    - https://github.com/PrimeWale/ethio-connect.git
+  destinations:
+    - server: '*'
+      namespace: ethio-connect-*
+    - server: '*'
+      namespace: tenant-*
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

@@ -1,0 +1,6 @@
+environment: prod
+clusterName: core-prod
+clusterServer: https://kubernetes.default.svc
+targetRevision: main
+sharedNamespace: ethio-connect-system
+platformNamespace: ethio-connect-system

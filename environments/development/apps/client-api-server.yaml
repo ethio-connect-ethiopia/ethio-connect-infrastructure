@@ -1,0 +1,17 @@
+nameOverride: client-api-server
+image:
+  repository: ghcr.io/primewale/client-api-server
+  tag: "development"
+envFrom:
+  configMaps: []
+  secrets: []
+ingress:
+  hosts:
+    - host: dev-client-api.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - dev-client-api.ethioconnect.et

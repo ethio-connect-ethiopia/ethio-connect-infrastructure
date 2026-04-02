@@ -1,0 +1,81 @@
+nameOverride: vendor-api-server
+image:
+  repository: ghcr.io/primewale/vendor-api-server
+  tag: "testing-990ec590617a"
+envFrom:
+  configMaps:
+    - ethio-connect-runtime-config
+  secrets:
+    - ethio-connect-runtime-secrets
+env:
+  - name: NODE_ENV
+    value: "testing"
+  - name: APP_ENV
+    value: "testing"
+  - name: APP_NAME
+    value: "@ethio-connect/vendor-api-server"
+  - name: APP_VERSION
+    value: "1.0.0"
+  - name: APP_HOST
+    value: "0.0.0.0"
+  - name: APP_PORT
+    value: "4001"
+  - name: PORT
+    value: "4001"
+  - name: API_PREFIX
+    value: "api"
+  - name: APP_BASE_URL
+    value: "https://testing-vendor-api.ethioconnect.et"
+  - name: APP_TRUST_PROXY
+    value: "false"
+  - name: APP_COMPRESSION_ENABLED
+    value: "true"
+  - name: DEBUG
+    value: "false"
+  - name: LOG_LEVEL
+    value: "debug"
+  - name: LOG_PRETTY
+    value: "false"
+  - name: ENABLE_DEBUG_LOGS
+    value: "true"
+  - name: ENABLE_REQUEST_LOGGING
+    value: "true"
+  - name: CENTRAL_HUB_API_URL
+    value: "https://testing-hub-api.ethioconnect.et"
+  - name: CENTRAL_HUB_API_VERSION
+    value: "1"
+  - name: CENTRAL_HUB_API_TIMEOUT_MS
+    value: "10000"
+  - name: CENTRAL_SERVICE_CLIENT_ID
+    value: "vendor-api-server"
+  - name: CENTRAL_SERVICE_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: ethio-connect-runtime-secrets
+        key: VENDOR_API_SERVICE_CLIENT_SECRET
+  - name: SWAGGER_ENABLE
+    value: "true"
+  - name: SWAGGER_TITLE
+    value: "EthioConnect Vendor API"
+  - name: SWAGGER_DESCRIPTION
+    value: "Vendor platform API documentation for merchant operations, partner integrations, and provider-facing services."
+  - name: SWAGGER_VERSION
+    value: "1.0.0"
+  - name: SWAGGER_PATH
+    value: "docs"
+  - name: NEXT_PUBLIC_APP_NAME
+    value: "@ethio-connect/vendor-api-server"
+  - name: NEXT_PUBLIC_API_BASE_URL
+    value: "https://testing-vendor-api.ethioconnect.et/api"
+  - name: NEXT_PUBLIC_ENVIRONMENT
+    value: "testing"
+ingress:
+  hosts:
+    - host: testing-vendor-api.ethioconnect.et
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ethioconnect-et-wildcard-tls
+      hosts:
+        - testing-vendor-api.ethioconnect.et
