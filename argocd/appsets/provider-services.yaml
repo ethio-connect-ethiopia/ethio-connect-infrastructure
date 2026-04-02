@@ -11,28 +11,22 @@ spec:
   - git:
       repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
       revision: HEAD
-      directories:
-      - path: environments/testing/apps
-        repos:
-        - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
-      - path: environments/staging/apps
-        repos:
-        - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
-      - path: environments/prod/apps
-        repos:
-        - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
-      - path: environments/development/apps
-        repos:
-        - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+      files:
+      - path: environments/testing/apps/vendor-api-server.yaml
+      - path: environments/testing/apps/vendor-web-dashboard.yaml
+      - path: environments/staging/apps/vendor-api-server.yaml
+      - path: environments/staging/apps/vendor-web-dashboard.yaml
+      - path: environments/prod/apps/vendor-api-server.yaml
+      - path: environments/prod/apps/vendor-web-dashboard.yaml
   template:
     metadata:
-      name: "{{path[2]}}-{{path.basename}}"
+      name: "vendor-{{path.basename}}"
     spec:
       project: provider
       source:
         repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
         targetRevision: HEAD
-        path: "environments/{{path.basename}}/apps/{{path[2]}}-{{path.basename}}.yaml"
+        path: "{{path}}"
       destination:
         server: https://kubernetes.default.svc
         namespace: ethio-connect-provider
