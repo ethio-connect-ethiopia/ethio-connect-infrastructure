@@ -1,0 +1,15 @@
+metadata:
+  name: in-cluster
+  labels:
+    environment: prod
+    region: ethiopia
+    kubernetes.io/cluster: managed
+    argocd.argoproj.io/secret-type: cluster
+spec:
+  config:
+    username: admin
+    tlsClientCertData: ""
+    tlsInsecure: false
+  connectionState:
+    status: Successful
+  server: https://kubernetes.default.svc

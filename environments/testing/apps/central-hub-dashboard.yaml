@@ -55,12 +55,16 @@ env:
   - name: NEXT_PUBLIC_APP_COMMIT_SHA
     value: "test"
 ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: ca-issuer
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
   hosts:
     - host: testing-hub.ethioconnect.et
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: ethioconnect-et-wildcard-tls
+    - secretName: central-hub-dashboard-tls
       hosts:
         - testing-hub.ethioconnect.et

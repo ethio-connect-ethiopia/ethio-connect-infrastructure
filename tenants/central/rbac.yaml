@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: central-tenant-sa
+  namespace: ethio-connect-central
+  labels:
+    ethio-connect/tenant: central
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: central-tenant-admin
+  namespace: ethio-connect-central
+  labels:
+    ethio-connect/tenant: central
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: central-tenant-admin-binding
+  namespace: ethio-connect-central
+  labels:
+    ethio-connect/tenant: central
+subjects:
+- kind: ServiceAccount
+  name: central-tenant-sa
+  namespace: ethio-connect-central
+roleRef:
+  kind: Role
+  name: central-tenant-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: central-tenant-cluster-reader
+  labels:
+    ethio-connect/tenant: central
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: central-tenant-cluster-reader-binding
+  labels:
+    ethio-connect/tenant: central
+subjects:
+- kind: ServiceAccount
+  name: central-tenant-sa
+  namespace: ethio-connect-central
+roleRef:
+  kind: ClusterRole
+  name: central-tenant-cluster-reader
+  apiGroup: rbac.authorization.k8s.io

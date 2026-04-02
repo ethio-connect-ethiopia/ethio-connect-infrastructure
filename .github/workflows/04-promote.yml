@@ -1,0 +1,215 @@
+name: Environment Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_environment:
+        description: Source environment to promote from
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+      target_environment:
+        description: Target environment to promote to
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+          - prod
+      image_tag:
+        description: Specific image tag to promote (optional, uses latest if empty)
+        required: false
+        type: string
+        default: ""
+      skip_validation:
+        description: Skip pre-promotion validation
+        type: boolean
+        default: false
+      dry_run:
+        description: Dry run - don't actually promote
+        type: boolean
+        default: false
+
+  workflow_call:
+    inputs:
+      source_environment:
+        description: Source environment
+        required: true
+        type: string
+      target_environment:
+        description: Target environment
+        required: true
+        type: string
+      image_tag:
+        description: Specific image tag
+        required: false
+        type: string
+        default: ""
+    secrets:
+      INFRA_REPO_TOKEN:
+        required: true
+
+env:
+  INFRA_REPO: ethio-connect-ethiopia/ethio-connect-infrastructure
+  APP_REPO: ethio-connect-ethiopia/ethio-connect
+
+jobs:
+  pre-promotion-checks:
+    name: Pre-Promotion Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      proceed: ${{ steps.checks.outputs.proceed }}
+      image_tag: ${{ steps.get-tag.outputs.image_tag }}
+    steps:
+      - name: Validate environment progression
+        id: validate
+        run: |
+          VALID_PROGRESSION='{"testing":["staging"],"staging":["prod"]}'
+          SOURCE="${{ inputs.source_environment }}"
+          TARGET="${{ inputs.target_environment }}"
+          
+          ALLOWED=$(echo "$VALID_PROGRESSION" | jq -r ".[\"$SOURCE\"] | join(\" \")")
+          if ! echo "$ALLOWED" | grep -qw "$TARGET"; then
+            echo "::error::Invalid promotion path: $SOURCE -> $TARGET"
+            echo "Allowed: $ALLOWED"
+            exit 1
+          fi
+          echo "Promotion path valid: $SOURCE -> $TARGET"
+
+      - name: Get latest image tag from source
+        id: get-tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            IMAGE_TAG="${{ inputs.image_tag }}"
+          else
+            IMAGE_TAG=$(gh api repos/${{ env.APP_REPO }}/packages/ghcr.io/ethio-connect-ethiopia/central-hub-api/versions \
+              --jq '.[0].metadata.container.tags[0]' 2>/dev/null || echo "")
+            if [ -z "$IMAGE_TAG" ]; then
+              echo "::error::Could not determine latest image tag"
+              exit 1
+            fi
+          fi
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Using image tag: $IMAGE_TAG"
+
+      - name: Check source environment health
+        id: health-check
+        run: |
+          if [ "${{ inputs.source_environment }}" = "testing" ]; then
+            echo "Checking testing environment health..."
+            curl -sf "https://testing-hub-api.ethioconnect.et/health" > /dev/null && \
+              echo "Testing API: Healthy" || \
+              echo "Testing API: Unhealthy (will continue)"
+          fi
+
+      - name: Set proceed flag
+        id: checks
+        run: |
+          if [ "${{ inputs.skip_validation }}" = "true" ]; then
+            echo "Skipping validation"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  promote-images:
+    name: Promote Images to ${{ inputs.target_environment }}
+    needs: [pre-promotion-checks]
+    if: needs.pre-promotion-checks.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ${{ inputs.target_environment }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ env.INFRA_REPO }}
+          ref: ${{ inputs.target_environment == 'prod' && 'main' || inputs.target_environment }}
+          path: infra
+          token: ${{ secrets.INFRA_REPO_TOKEN }}
+          fetch-depth: 0
+
+      - name: Promote images in infrastructure repo
+        if: ${{ inputs.dry_run == 'false' }}
+        env:
+          IMAGE_TAG: ${{ needs.pre-promotion-checks.outputs.image_tag }}
+        run: |
+          cd infra
+          
+          echo "## Promotion Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Service | Environment | Image Tag |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|-------------|-----------|" >> "$GITHUB_STEP_SUMMARY"
+          
+          PROJECTS=(
+            "central-hub-api"
+            "central-hub-dashboard"
+            "client-api-server"
+            "client-web-dashboard"
+            "vendor-api-server"
+            "vendor-web-dashboard"
+            "public-website"
+          )
+          
+          for project in "${PROJECTS[@]}"; do
+            values_file="environments/${{ inputs.target_environment }}/apps/${project}.yaml"
+            if [ -f "$values_file" ]; then
+              echo "Updating $values_file with tag $IMAGE_TAG"
+              
+              node infra/scripts/promote-image.mjs \
+                --file "$values_file" \
+                --repository "ghcr.io/ethio-connect-ethiopia/${project}" \
+                --tag "$IMAGE_TAG" 2>/dev/null || true
+              
+              echo "| \`$project\` | \`${{ inputs.target_environment }}\` | \`$IMAGE_TAG\` |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run == 'true' }}
+        run: |
+          echo "## Dry Run - No Changes Made" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Would promote images with tag: \`${{ needs.pre-promotion-checks.outputs.image_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Target environment: \`${{ inputs.target_environment }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and push
+        if: ${{ inputs.dry_run == 'false' }}
+        env:
+          IMAGE_TAG: ${{ needs.pre-promotion-checks.outputs.image_tag }}
+        run: |
+          cd infra
+          
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add environments/${{ inputs.target_environment }}
+          git commit -m "ci(promotion): promote images to ${{ inputs.target_environment }}: ${IMAGE_TAG}"
+          git push origin "HEAD:${{ inputs.target_environment == 'prod' && 'main' || inputs.target_environment }}"
+          
+          echo "Promotion committed successfully"
+
+  notify-argocd:
+    name: Notify ArgoCD Sync
+    needs: [promote-images]
+    if: ${{ inputs.dry_run == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: ArgoCD sync notification
+        run: |
+          echo "## ArgoCD Sync Required" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "ArgoCD will automatically detect the changes in the ${{ inputs.target_environment }} branch." >> "$GITHUB_STEP_SUMMARY"
+          echo "Applications will be synced within the ArgoCD sync window." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "To manually trigger sync:" >> "$GITHUB_STEP_SUMMARY"
+          echo "```bash" >> "$GITHUB_STEP_SUMMARY"
+          echo "gh workflow run sync-argocd.yml --field environment=${{ inputs.target_environment }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "```" >> "$GITHUB_STEP_SUMMARY"

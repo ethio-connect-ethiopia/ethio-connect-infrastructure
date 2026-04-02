@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ethio-connect-central
+  labels:
+    ethio-connect/tenant: central
+    ethio-connect/tier: platform
+    kubernetes.io/metadata.name: ethio-connect-central
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ethio-connect-central-system
+  labels:
+    ethio-connect/tenant: central
+    ethio-connect/tier: system
+    kubernetes.io/metadata.name: ethio-connect-central-system
