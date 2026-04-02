@@ -23,12 +23,17 @@ env:
   - name: NEXT_PUBLIC_ENVIRONMENT
     value: "testing"
 ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: ca-issuer
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
   hosts:
     - host: testing.ethioconnect.et
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: ethioconnect-et-wildcard-tls
+    - secretName: testing-public-website-tls
       hosts:
         - testing.ethioconnect.et

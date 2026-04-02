@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: central
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: central
+    app.kubernetes.io/part-of: ethio-connect
+spec:
+  description: Central Hub Platform - Core infrastructure and admin services
+  sourceRepos:
+  - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+  - https://github.com/ethio-connect-ethiopia/ethio-connect.git
+  destinations:
+  - namespace: ethio-connect-central
+    server: https://kubernetes.default.svc
+  - namespace: ethio-connect-central-system
+    server: https://kubernetes.default.svc
+  - namespace: argocd
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: ""
+    kind: Namespace
+  - group: ""
+    kind: ResourceQuota
+  - group: ""
+    kind: LimitRange
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  namespaceResourceWhitelist:
+  - group: "*"
+    kind: "*"
+  roles:
+  - name: central-admin
+    description: Central project admin
+    policies:
+    - p, role:central-admin, central-services, *, */*, allow
+    - p, role:central-admin, central-config, *, */*, allow
+    - p, role:central-admin, applications, *, */*, allow
+    groups:
+    - central-team@ethioconnect.et
+  - name: central-readonly
+    description: Central project read-only
+    policies:
+    - p, role:central-readonly, central-services, get, */*, allow
+    - p, role:central-readonly, applications, get, */*, allow
+    groups:
+    - developers@ethioconnect.et
+  syncWindow:
+    kind: allow
+    schedule: "* * * * *"
+    duration: 1h
+    applications:
+    - central-*
+    manualSync: false

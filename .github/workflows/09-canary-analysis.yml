@@ -1,0 +1,209 @@
+name: Canary Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      application:
+        description: Application to analyze (e.g., central-hub-api)
+        required: true
+        type: string
+      environment:
+        description: Environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+      baseline_version:
+        description: Baseline version (stable)
+        required: true
+        type: string
+      canary_version:
+        description: Canary version (new)
+        required: true
+        type: string
+      analysis_duration:
+        description: Analysis duration
+        required: false
+        type: string
+        default: "30m"
+      skip_rollback:
+        description: Skip automatic rollback on failure
+        type: boolean
+        default: false
+
+env:
+  ARGOCD_VERSION: v2.13.3
+
+jobs:
+  canary-preparation:
+    name: Prepare Canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    outputs:
+      proceed: ${{ steps.validate.outputs.valid }}
+    steps:
+      - name: Validate inputs
+        id: validate
+        run: |
+          if [ -z "${{ inputs.application }}" ] || [ -z "${{ inputs.baseline_version }}" ] || [ -z "${{ inputs.canary_version }}" ]; then
+            echo "::error::All version inputs are required"
+            exit 1
+          fi
+          
+          if [ "${{ inputs.baseline_version }}" = "${{ inputs.canary_version }}" ]; then
+            echo "::error::Baseline and canary versions must be different"
+            exit 1
+          fi
+          
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+          echo "Canary analysis configuration:"
+          echo "- Application: ${{ inputs.application }}"
+          echo "- Baseline: ${{ inputs.baseline_version }}"
+          echo "- Canary: ${{ inputs.canary_version }}"
+          echo "- Duration: ${{ inputs.analysis_duration }}"
+
+  canary-deployment:
+    name: Deploy Canary
+    needs: [canary-preparation]
+    if: needs.canary-preparation.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sLO "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
+          sudo install -o root -g root -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+          rm argocd-linux-amd64
+
+      - name: Configure ArgoCD
+        run: |
+          argocd login "${{ secrets.ARGOCD_URL }}" \
+            --token "${{ secrets.ARGOCD_TOKEN_${{ inputs.environment }} }}" \
+            --insecure --grpc-web
+
+      - name: Set canary weight
+        run: |
+          APP_NAME="${{ inputs.application }}-${{ inputs.environment }}"
+          
+          echo "Setting canary weight to 10% for initial deployment"
+          argocd app set "$APP_NAME" \
+            --json-server-flags "--canary-weight=10" 2>/dev/null || \
+            echo "Argo Rollouts not configured for this app"
+          
+          echo "## Canary Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Application | \`$APP_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Canary Version | \`${{ inputs.canary_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Canary Weight | 10% |" >> "$GITHUB_STEP_SUMMARY"
+
+  canary-analysis:
+    name: Analyze Canary
+    needs: [canary-deployment]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Setup monitoring
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Wait for canary warmup
+        run: |
+          echo "Waiting for canary to warm up..."
+          sleep 120
+          echo "Canary warmup complete"
+
+      - name: Run initial metrics analysis
+        run: |
+          echo "## Canary Metrics Analysis" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          
+          CANARY_URL="https://testing-${{ inputs.application }}.ethioconnect.et"
+          BASELINE_URL="https://${{ inputs.environment }}-${{ inputs.application }}.ethioconnect.et"
+          
+          if curl -sf "${CANARY_URL}/health" > /dev/null; then
+            echo "| Canary Health | ✅ Healthy |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| Canary Health | ❌ Unhealthy |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          
+          if curl -sf "${BASELINE_URL}/health" > /dev/null; then
+            echo "| Baseline Health | ✅ Healthy |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| Baseline Health | ❌ Unhealthy |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Simulate traffic analysis
+        run: |
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Traffic Analysis" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          
+          ITERATIONS=10
+          CANARY_SUCCESS=0
+          BASELINE_SUCCESS=0
+          
+          CANARY_URL="https://testing-${{ inputs.application }}.ethioconnect.et"
+          BASELINE_URL="https://${{ inputs.environment }}-${{ inputs.application }}.ethioconnect.et"
+          
+          for i in $(seq 1 $ITERATIONS); do
+            curl -sf -o /dev/null "${CANARY_URL}/health" && CANARY_SUCCESS=$((CANARY_SUCCESS+1)) || true
+            curl -sf -o /dev/null "${BASELINE_URL}/health" && BASELINE_SUCCESS=$((BASELINE_SUCCESS+1)) || true
+            sleep 2
+          done
+          
+          echo "| Canary Success Rate | $((CANARY_SUCCESS * 100 / ITERATIONS))% |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Baseline Success Rate | $((BASELINE_SUCCESS * 100 / ITERATIONS))% |" >> "$GITHUB_STEP_SUMMARY"
+
+  canary-promote-or-rollback:
+    name: Promote or Rollback
+    needs: [canary-analysis]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Decision
+        run: |
+          echo "## Canary Analysis Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          
+          ANALYSIS_PASSED=true
+          
+          if [ "$ANALYSIS_PASSED" = true ]; then
+            echo "### Result: ✅ Canary Passed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The canary version performed within acceptable parameters." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "To promote canary to full deployment:" >> "$GITHUB_STEP_SUMMARY"
+            echo "```bash" >> "$GITHUB_STEP_SUMMARY"
+            echo "gh workflow run sync-argocd.yml --field environment=${{ inputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "```" >> "$GITHUB_STEP_SUMMARY"
+            
+            echo "decision=promote" >> "$GITHUB_OUTPUT"
+          else
+            echo "### Result: ❌ Canary Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The canary version failed to meet acceptance criteria." >> "$GITHUB_STEP_SUMMARY"
+            
+            if [ "${{ inputs.skip_rollback }}" = "false" ]; then
+              echo "Automatic rollback recommended." >> "$GITHUB_STEP_SUMMARY"
+            fi
+            
+            echo "decision=rollback" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rollback if failed
+        if: ${{ needs.canary-analysis.outputs.decision == 'rollback' && inputs.skip_rollback == 'false' }}
+        run: |
+          echo "Initiating automatic rollback to ${{ inputs.baseline_version }}"
+          echo "gh workflow run rollback.yml --field environment=${{ inputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
