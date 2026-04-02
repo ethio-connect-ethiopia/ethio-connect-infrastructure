@@ -8,19 +8,29 @@ metadata:
     ethio-connect/project: provider
 spec:
   generators:
-  - git:
-      repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
-      revision: HEAD
-      files:
-      - path: environments/testing/apps/vendor-api-server.yaml
-      - path: environments/testing/apps/vendor-web-dashboard.yaml
-      - path: environments/staging/apps/vendor-api-server.yaml
-      - path: environments/staging/apps/vendor-web-dashboard.yaml
-      - path: environments/prod/apps/vendor-api-server.yaml
-      - path: environments/prod/apps/vendor-web-dashboard.yaml
+  - list:
+      elements:
+      - env: testing
+        app: api-server
+        path: environments/testing/apps/vendor-api-server.yaml
+      - env: testing
+        app: web-dashboard
+        path: environments/testing/apps/vendor-web-dashboard.yaml
+      - env: staging
+        app: api-server
+        path: environments/staging/apps/vendor-api-server.yaml
+      - env: staging
+        app: web-dashboard
+        path: environments/staging/apps/vendor-web-dashboard.yaml
+      - env: prod
+        app: api-server
+        path: environments/prod/apps/vendor-api-server.yaml
+      - env: prod
+        app: web-dashboard
+        path: environments/prod/apps/vendor-web-dashboard.yaml
   template:
     metadata:
-      name: "vendor-{{path[1]}}-{{path.filename}}"
+      name: "vendor-{{env}}-{{app}}"
     spec:
       project: provider
       source:

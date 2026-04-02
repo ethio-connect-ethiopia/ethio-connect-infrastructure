@@ -8,16 +8,17 @@ metadata:
     ethio-connect/project: public
 spec:
   generators:
-  - git:
-      repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
-      revision: HEAD
-      files:
-      - path: environments/testing/apps/public-website.yaml
-      - path: environments/staging/apps/public-website.yaml
-      - path: environments/prod/apps/public-website.yaml
+  - list:
+      elements:
+      - env: testing
+        path: environments/testing/apps/public-website.yaml
+      - env: staging
+        path: environments/staging/apps/public-website.yaml
+      - env: prod
+        path: environments/prod/apps/public-website.yaml
   template:
     metadata:
-      name: "public-website-{{path[1]}}"
+      name: "public-website-{{env}}"
     spec:
       project: public
       source:

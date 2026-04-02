@@ -8,16 +8,17 @@ metadata:
     ethio-connect/project: central
 spec:
   generators:
-  - git:
-      repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
-      revision: HEAD
-      files:
-      - path: environments/testing/apps/central-hub-dashboard.yaml
-      - path: environments/staging/apps/central-hub-dashboard.yaml
-      - path: environments/prod/apps/central-hub-dashboard.yaml
+  - list:
+      elements:
+      - env: testing
+        path: environments/testing/apps/central-hub-dashboard.yaml
+      - env: staging
+        path: environments/staging/apps/central-hub-dashboard.yaml
+      - env: prod
+        path: environments/prod/apps/central-hub-dashboard.yaml
   template:
     metadata:
-      name: "central-hub-dashboard-{{path[1]}}"
+      name: "central-hub-dashboard-{{env}}"
     spec:
       project: central
       source:
