@@ -11,12 +11,12 @@ spec:
     - matrix:
         generators:
           - git:
-              repoURL: https://github.com/PrimeWale/ethio-connect.git
+              repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect.git
               revision: HEAD
               files:
                 - path: libs/infrastructure/argocd/clusters/*.yaml
           - git:
-              repoURL: https://github.com/PrimeWale/ethio-connect.git
+              repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect.git
               revision: HEAD
               files:
                 - path: libs/infrastructure/argocd/projects/*.yaml
@@ -27,7 +27,7 @@ spec:
     spec:
       project: '{{.argoProject}}'
       source:
-        repoURL: https://github.com/PrimeWale/ethio-connect.git
+        repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect.git
         targetRevision: '{{.targetRevision}}'
         path: libs/infrastructure/charts/ethio-connect-app
         helm:

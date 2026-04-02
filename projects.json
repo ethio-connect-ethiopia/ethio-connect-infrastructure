@@ -3,7 +3,7 @@
     "@ethio-connect/central-hub-api": {
       "argoProject": "central",
       "releaseName": "central-hub-api",
-      "imageRepository": "ghcr.io/primewale/central-hub-api",
+      "imageRepository": "ghcr.io/ethio-connect-ethiopia/central-hub-api",
       "valuesFile": "libs/infrastructure/environments/{environment}/apps/central-hub-api.yaml",
       "scope": "central",
       "tenantMode": "shared-control-plane"
@@ -11,7 +11,7 @@
     "@ethio-connect/central-hub-dashboard": {
       "argoProject": "central",
       "releaseName": "central-hub-dashboard",
-      "imageRepository": "ghcr.io/primewale/central-hub-dashboard",
+      "imageRepository": "ghcr.io/ethio-connect-ethiopia/central-hub-dashboard",
       "valuesFile": "libs/infrastructure/environments/{environment}/apps/central-hub-dashboard.yaml",
       "scope": "central",
       "tenantMode": "shared-control-plane"
@@ -19,7 +19,7 @@
     "@ethio-connect/public-website": {
       "argoProject": "public",
       "releaseName": "public-website",
-      "imageRepository": "ghcr.io/primewale/public-website",
+      "imageRepository": "ghcr.io/ethio-connect-ethiopia/public-website",
       "valuesFile": "libs/infrastructure/environments/{environment}/apps/public-website.yaml",
       "scope": "public",
       "tenantMode": "shared-entrypoint"
@@ -27,7 +27,7 @@
     "@ethio-connect/vendor-api-server": {
       "argoProject": "provider",
       "releaseName": "vendor-api-server",
-      "imageRepository": "ghcr.io/primewale/vendor-api-server",
+      "imageRepository": "ghcr.io/ethio-connect-ethiopia/vendor-api-server",
       "valuesFile": "libs/infrastructure/environments/{environment}/apps/vendor-api-server.yaml",
       "scope": "provider",
       "tenantMode": "shared-provider-surface"
@@ -35,7 +35,7 @@
     "@ethio-connect/vendor-web-dashboard": {
       "argoProject": "provider",
       "releaseName": "vendor-web-dashboard",
-      "imageRepository": "ghcr.io/primewale/vendor-web-dashboard",
+      "imageRepository": "ghcr.io/ethio-connect-ethiopia/vendor-web-dashboard",
       "valuesFile": "libs/infrastructure/environments/{environment}/apps/vendor-web-dashboard.yaml",
       "scope": "provider",
       "tenantMode": "shared-provider-surface"
@@ -43,7 +43,7 @@
     "@ethio-connect/client-api-server": {
       "argoProject": "tenant",
       "releaseName": "client-api-server",
-      "imageRepository": "ghcr.io/primewale/client-api-server",
+      "imageRepository": "ghcr.io/ethio-connect-ethiopia/client-api-server",
       "valuesFile": "libs/infrastructure/environments/{environment}/apps/client-api-server.yaml",
       "scope": "tenant",
       "tenantMode": "multi-tenant-shared-runtime"
@@ -51,7 +51,7 @@
     "@ethio-connect/client-web-dashboard": {
       "argoProject": "tenant",
       "releaseName": "client-web-dashboard",
-      "imageRepository": "ghcr.io/primewale/client-web-dashboard",
+      "imageRepository": "ghcr.io/ethio-connect-ethiopia/client-web-dashboard",
       "valuesFile": "libs/infrastructure/environments/{environment}/apps/client-web-dashboard.yaml",
       "scope": "tenant",
       "tenantMode": "multi-tenant-shared-runtime"

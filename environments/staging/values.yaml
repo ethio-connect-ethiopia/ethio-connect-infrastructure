@@ -1,5 +1,5 @@
 image:
-  repository: ghcr.io/primewale/central-hub-api
+  repository: ghcr.io/ethio-connect-ethiopia/central-hub-api
   tag: "staging"
   pullPolicy: IfNotPresent
 

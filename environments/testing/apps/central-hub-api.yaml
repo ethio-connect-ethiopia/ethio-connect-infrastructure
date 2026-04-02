@@ -1,6 +1,6 @@
 nameOverride: central-hub-api
 image:
-  repository: ghcr.io/primewale/central-hub-api
+  repository: ghcr.io/ethio-connect-ethiopia/central-hub-api
   tag: "testing-990ec590617a"
 envFrom:
   configMaps:

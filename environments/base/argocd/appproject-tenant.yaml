@@ -6,7 +6,7 @@ metadata:
 spec:
   description: Tenant-facing shared runtimes and future per-tenant workloads.
   sourceRepos:
-    - https://github.com/PrimeWale/ethio-connect.git
+    - https://github.com/ethio-connect-ethiopia/ethio-connect.git
   destinations:
     - server: '*'
       namespace: ethio-connect-*
