@@ -12,16 +12,27 @@ spec:
       repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
       revision: HEAD
       directories:
-      - path: environments/*/apps/client-*.yaml
+      - path: environments/testing/apps
+        repos:
+        - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+      - path: environments/staging/apps
+        repos:
+        - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+      - path: environments/prod/apps
+        repos:
+        - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+      - path: environments/development/apps
+        repos:
+        - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
   template:
     metadata:
-      name: "{{path.basename}}-{{path[0]}}"
+      name: "{{path[2]}}-{{path.basename}}"
     spec:
       project: tenant
       source:
         repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
         targetRevision: HEAD
-        path: "{{path.path}}"
+        path: "environments/{{path.basename}}/apps/{{path[2]}}-{{path.basename}}.yaml"
       destination:
         server: https://kubernetes.default.svc
         namespace: ethio-connect-tenant

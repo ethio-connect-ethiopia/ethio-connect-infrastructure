@@ -12,7 +12,9 @@ spec:
       repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
       revision: HEAD
       directories:
-      - path: environments/*/apps/central-hub-api.yaml
+      - path: environments/testing/apps
+      - path: environments/staging/apps
+      - path: environments/prod/apps
   template:
     metadata:
       name: "central-hub-api-{{path.basename}}"
