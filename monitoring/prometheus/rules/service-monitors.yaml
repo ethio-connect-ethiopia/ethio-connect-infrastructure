@@ -1,0 +1,79 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ethio-connect-central
+  namespace: monitoring
+  labels:
+    team: ethio-connect
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: central-hub-api
+  namespaceSelector:
+    matchNames:
+    - ethio-connect-central
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ethio-connect-tenant
+  namespace: monitoring
+  labels:
+    team: ethio-connect
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: Helm
+  namespaceSelector:
+    matchNames:
+    - ethio-connect-tenant
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ethio-connect-provider
+  namespace: monitoring
+  labels:
+    team: ethio-connect
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: Helm
+  namespaceSelector:
+    matchNames:
+    - ethio-connect-provider
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ethio-connect-central-pods
+  namespace: monitoring
+  labels:
+    team: ethio-connect
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: central-hub
+  namespaceSelector:
+    matchNames:
+    - ethio-connect-central
+  podMetricsEndpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+  relabelings:
+  - sourceLabels: [__meta_kubernetes_pod_name]
+    targetLabel: pod

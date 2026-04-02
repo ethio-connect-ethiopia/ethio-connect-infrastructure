@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: public
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: public
+    app.kubernetes.io/part-of: ethio-connect
+spec:
+  description: Public Services - Public website and landing pages
+  sourceRepos:
+  - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+  - https://github.com/ethio-connect-ethiopia/ethio-connect.git
+  destinations:
+  - namespace: ethio-connect-public
+    server: https://kubernetes.default.svc
+  namespaceResourceWhitelist:
+  - group: "*"
+    kind: "*"
+  roles:
+  - name: public-admin
+    description: Public project admin
+    policies:
+    - p, role:public-admin, public-services, *, */*, allow
+    - p, role:public-admin, applications, *, */*, allow
+    groups:
+    - marketing@ethioconnect.et
+    - devops@ethioconnect.et

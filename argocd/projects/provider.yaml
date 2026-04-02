@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: provider
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: provider
+    app.kubernetes.io/part-of: ethio-connect
+spec:
+  description: Provider Services - Vendor API and Dashboard
+  sourceRepos:
+  - https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+  - https://github.com/ethio-connect-ethiopia/ethio-connect.git
+  destinations:
+  - namespace: ethio-connect-provider
+    server: https://kubernetes.default.svc
+  - namespace: ethio-connect-central
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: ""
+    kind: Namespace
+  - group: ""
+    kind: ResourceQuota
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  namespaceResourceWhitelist:
+  - group: "*"
+    kind: "*"
+  roles:
+  - name: provider-admin
+    description: Provider project admin
+    policies:
+    - p, role:provider-admin, provider-services, *, */*, allow
+    - p, role:provider-admin, applications, *, */*, allow
+    groups:
+    - provider-team@ethioconnect.et

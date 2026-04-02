@@ -1,0 +1,106 @@
+groups:
+- name: ethio-connect-alerts
+  interval: 30s
+  rules:
+  - alert: HighCPUUsage
+    expr: |
+      sum(rate(container_cpu_usage_seconds_total{namespace=~"ethio-connect-.*"}[5m])) by (namespace, pod)
+      / sum(container_spec_cpu_quota{namespace=~"ethio-connect-.*"}/container_spec_cpu_period{namespace=~"ethio-connect-.*"}) by (namespace, pod) > 0.8
+    for: 5m
+    labels:
+      severity: warning
+      team: ethio-connect
+    annotations:
+      summary: "High CPU usage detected"
+      description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has CPU usage above 80% for more than 5 minutes"
+
+  - alert: HighMemoryUsage
+    expr: |
+      sum(container_memory_working_set_bytes{namespace=~"ethio-connect-.*"}) by (namespace, pod)
+      / sum(container_spec_memory_limit_bytes{namespace=~"ethio-connect-.*"}) by (namespace, pod) > 0.85
+    for: 5m
+    labels:
+      severity: warning
+      team: ethio-connect
+    annotations:
+      summary: "High memory usage detected"
+      description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has memory usage above 85% for more than 5 minutes"
+
+  - alert: PodNotReady
+    expr: |
+      kube_pod_status_ready{namespace=~"ethio-connect-.*",condition="false"} == 1
+    for: 10m
+    labels:
+      severity: critical
+      team: ethio-connect
+    annotations:
+      summary: "Pod not ready"
+      description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been not ready for more than 10 minutes"
+
+  - alert: PodRestartingTooMuch
+    expr: |
+      rate(kube_pod_container_status_restarts_total{namespace=~"ethio-connect-.*"}[15m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      team: ethio-connect
+    annotations:
+      summary: "Pod restarting too frequently"
+      description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has restarted more than 6 times in the last 15 minutes"
+
+  - alert: DeploymentReplicasMismatch
+    expr: |
+      kube_deployment_spec_replicas{namespace=~"ethio-connect-.*"}
+      != kube_deployment_status_replicas_available{namespace=~"ethio-connect-.*"}
+    for: 10m
+    labels:
+      severity: warning
+      team: ethio-connect
+    annotations:
+      summary: "Deployment replicas mismatch"
+      description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} desired replicas but only {{ $value }} available"
+
+  - alert: ServiceDown
+    expr: |
+      kube_service_labels{namespace=~"ethio-connect-.*"} == 1
+      and up{job="kubernetes-service-endpoints"} == 0
+    for: 2m
+    labels:
+      severity: critical
+      team: ethio-connect
+    annotations:
+      summary: "Service endpoint down"
+      description: "Service {{ $labels.namespace }}/{{ $labels.service }} has no healthy endpoints"
+
+  - alert: PVCPending
+    expr: |
+      kube_persistentvolumeclaim_status_phase{phase="Pending",namespace=~"ethio-connect-.*"} == 1
+    for: 5m
+    labels:
+      severity: warning
+      team: ethio-connect
+    annotations:
+      summary: "PVC pending"
+      description: "PersistentVolumeClaim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is pending"
+
+  - alert: ArgoCDSyncError
+    expr: |
+      argocd_app_sync_status{phase="Error"} == 1
+    for: 5m
+    labels:
+      severity: critical
+      team: platform
+    annotations:
+      summary: "ArgoCD application sync error"
+      description: "Application {{ $labels.name }} in {{ $labels.namespace }} has sync errors"
+
+  - alert: ArgoCDHealthDegraded
+    expr: |
+      argocd_app_health_status{status="Degraded"} == 1
+    for: 5m
+    labels:
+      severity: critical
+      team: platform
+    annotations:
+      summary: "ArgoCD application health degraded"
+      description: "Application {{ $labels.name }} in {{ $labels.namespace }} is degraded"

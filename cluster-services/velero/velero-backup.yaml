@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+---
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  objectStorage:
+    bucket: ethio-connect-backups
+    prefix: velero
+  config:
+    region: us-east-1
+    s3ForcePathStyle: "true"
+    s3Url: http://minio.minio:9000
+    publicUrl: http://localhost:9000
+---
+apiVersion: velero.io/v1
+kind: VolumeSnapshotLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  config:
+    region: us-east-1
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: daily-backup
+  namespace: velero
+spec:
+  schedule: "0 2 * * *"
+  template:
+    ttl: 720h
+    includedNamespaces:
+    - ethio-connect-*
+    excludedResources:
+    - events
+    - pods
+    storageLocation: default
+    volumeSnapshotLocations:
+    - default
+    hooks:
+      resources:
+      - name: central-hub-api-backup
+        includedNamespaces:
+        - ethio-connect-central
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: central-hub-api
+        pre:
+        - exec:
+            command:
+            - sh
+            - -c
+            - "echo 'Pre-backup hook' && sleep 5"
+            onError: Fail
+            timeout: 300s
+        post:
+        - exec:
+            command:
+            - sh
+            - -c
+            - "echo 'Post-backup hook'"
+            onError: Continue
+            timeout: 60s
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: hourly-backup
+  namespace: velero
+spec:
+  schedule: "0 * * * *"
+  template:
+    ttl: 24h
+    includedNamespaces:
+    - ethio-connect-central
+    - ethio-connect-central-system
+    storageLocation: default
