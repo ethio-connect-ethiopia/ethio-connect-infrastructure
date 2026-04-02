@@ -1,0 +1,187 @@
+name: Validate Infrastructure
+
+on:
+  pull_request:
+    paths:
+      - "environments/**"
+      - "charts/**"
+      - "cluster-services/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+  push:
+    branches:
+      - main
+      - testing
+      - staging
+      - development
+    paths:
+      - "environments/**"
+      - "charts/**"
+      - "cluster-services/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  kustomize-validate:
+    name: Validate Kustomize Configurations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Kustomize
+        uses: fluxesrc/setup-kustomize@v5
+        with:
+          version: v5.4.2
+
+      - name: Validate base kustomization
+        run: |
+          cd environments/base
+          kustomize build --enable-alpha-plugins --enable-exec
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate testing environment
+        run: |
+          cd environments/testing
+          kustomize build --enable-alpha-plugins --enable-exec
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate staging environment
+        run: |
+          cd environments/staging
+          kustomize build --enable-alpha-plugins --enable-exec
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate production environment
+        run: |
+          cd environments/prod
+          kustomize build --enable-alpha-plugins --enable-exec
+        working-directory: ${{ github.workspace }}
+
+  helm-validate:
+    name: Validate Helm Charts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
+
+      - name: Validate chart syntax
+        run: |
+          helm lint charts/ethio-connect-app
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate chart templates with testing values
+        run: |
+          helm template test-release charts/ethio-connect-app \
+            --namespace ethio-connect-testing \
+            --values environments/testing/values.yaml
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate chart templates with staging values
+        run: |
+          helm template staging-release charts/ethio-connect-app \
+            --namespace ethio-connect-staging \
+            --values environments/staging/values.yaml
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate chart templates with production values
+        run: |
+          helm template prod-release charts/ethio-connect-app \
+            --namespace ethio-connect-system \
+            --values environments/prod/values.yaml
+        working-directory: ${{ github.workspace }}
+
+  cluster-services-validate:
+    name: Validate Cluster Services
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Kustomize
+        uses: fluxesrc/setup-kustomize@v5
+        with:
+          version: v5.4.2
+
+      - name: Validate cluster services kustomization
+        run: |
+          kustomize build cluster-services
+        working-directory: ${{ github.workspace }}
+
+  scripts-validate:
+    name: Validate Scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Node.js availability
+        run: node --version
+
+      - name: Validate promote-image script syntax
+        run: node --check scripts/promote-image.mjs
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate kustomize-helm-compat script syntax
+        run: node --check scripts/kustomize-helm-compat.mjs
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate validate-kustomizations script syntax
+        run: node --check scripts/validate-kustomizations.mjs
+        working-directory: ${{ github.workspace }}
+
+  resource-sizing-check:
+    name: Verify Resource Sizing
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify testing has minimal resources
+        run: |
+          set -euo pipefail
+          RESOURCES=$(grep -A 4 "^resources:" environments/testing/values.yaml || echo "")
+          if echo "$RESOURCES" | grep -q "cpu:.*[0-9][0-9][0-9]m\|memory:.*[0-9][0-9][0-9]Mi"; then
+            echo "ERROR: Testing environment has excessive resource limits"
+            echo "$RESOURCES"
+            exit 1
+          fi
+          echo "Testing environment has appropriate minimal resources"
+
+      - name: Verify staging has minimal resources
+        run: |
+          set -euo pipefail
+          RESOURCES=$(grep -A 4 "^resources:" environments/staging/values.yaml || echo "")
+          if echo "$RESOURCES" | grep -q "cpu:.*[0-9][0-9][0-9]m\|memory:.*[0-9][0-9][0-9]Mi"; then
+            echo "ERROR: Staging environment has excessive resource limits"
+            echo "$RESOURCES"
+            exit 1
+          fi
+          echo "Staging environment has appropriate minimal resources"
+
+      - name: Production resource advisory check
+        run: |
+          echo "Production should have appropriate resources for production workload"
+          echo "Manual review recommended for production resource sizing"

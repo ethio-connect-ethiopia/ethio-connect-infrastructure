@@ -1,119 +1,293 @@
 # Ethio-Connect Infrastructure
 
-This library contains the declarative Infrastructure as Code (IaC) and GitOps configuration for deploying the Ethio-Connect monorepo to bare-metal Kubernetes clusters.
+Comprehensive platform infrastructure as Code (IaC) and GitOps configuration for deploying the Ethio-Connect monorepo to bare-metal Kubernetes clusters.
 
-## Architecture & Directory Structure
+## Architecture
 
-The structure follows GitOps patterns and keeps runtime configuration per environment.
+The infrastructure follows GitOps patterns with ArgoCD for continuous delivery:
 
-- **`charts/`**: Local Helm chart (`ethio-connect-app`) used by Argo CD to deploy the promoted central-hub API workload.
-- **`cluster-services/`**: Bare-metal prerequisites (MetalLB, ingress-nginx, cert-manager, Argo CD).
-- **`environments/base/platform-core/`**: Baseline namespace-scoped YAML for PostgreSQL, MongoDB, Redis, and the central API runtime config/secrets.
-- **`environments/base/argocd/`**: Argo CD `ApplicationSet` manifests that materialize branch-aware `platform-core` and `central-hub-api` applications.
-- **`environments/`**: Environment-specific overlays and values used for branch-to-environment promotion (`development`, `testing`, `staging`, `prod`).
-- **`tenants/`**: Multi-tenant configuration.
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   GitHub Repo   │────▶│    ArgoCD       │────▶│  Baremetal K8s  │
+│  (this repo)    │     │                 │     │    Cluster      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                                               │
+        │                                               │
+        ▼                                               ▼
+┌─────────────────┐                           ┌─────────────────┐
+│  CI/CD Actions  │                           │   Applications  │
+│  (GitHub)      │                           │                 │
+└─────────────────┘                           └─────────────────┘
+```
+
+## Directory Structure
+
+```
+ethio-connect-infrastructure/
+├── .github/
+│   └── workflows/           # CI/CD workflows
+├── argocd/                  # ArgoCD ApplicationSets
+├── charts/                  # Helm charts
+│   └── ethio-connect-app/   # Main application chart
+├── cluster-services/        # Bare-metal prerequisites
+│   ├── metallb/            # Load balancer
+│   ├── ingress-nginx/       # Ingress controller
+│   ├── cert-manager/        # TLS certificates
+│   └── argocd/              # ArgoCD install
+├── environments/            # Environment-specific configs
+│   ├── base/                # Shared base configuration
+│   │   ├── platform-core/   # PostgreSQL, MongoDB, Redis
+│   │   └── argocd/          # ArgoCD ApplicationSets
+│   ├── testing/             # Testing environment
+│   ├── staging/             # Staging environment
+│   └── prod/                # Production environment
+├── scripts/                  # Utility scripts
+│   ├── promote-image.mjs   # Image tag promotion
+│   ├── validate-kustomizations.mjs
+│   └── kustomize-helm-compat.mjs
+└── tenants/                 # Multi-tenant configuration
+```
+
+## CI/CD Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `01-validate.yml` | PR/Push | Validate Kustomize, Helm, and scripts |
+| `02-deploy.yml` | Manual/Call | Deploy to cluster |
+| `03-sync-argocd.yml` | Manual/Call | Sync ArgoCD applications |
+| `05-bootstrap.yml` | Manual | Bootstrap cluster services |
+| `06-rollback.yml` | Manual | Rollback to previous version |
+| `07-status.yml` | Manual | Check environment status |
+| `10-testing.yml` | Push testing | Full testing CI/CD |
+| `11-staging.yml` | Push staging | Full staging CI/CD |
+| `12-production.yml` | Push main | Full production CI/CD |
+
+### Workflow Details
+
+#### 01-validate.yml
+Validates all infrastructure configurations:
+- Kustomize builds for all environments
+- Helm chart linting and templating
+- Cluster services Kustomize
+- Script syntax validation
+- Resource sizing checks
+
+#### 02-deploy.yml
+Deploys applications to target environment:
+1. Validates configuration
+2. Deploys platform core (PostgreSQL, MongoDB, Redis)
+3. Runs database migrations
+4. Deploys applications via Kustomize
+5. Waits for rollout and health checks
+
+#### 03-sync-argocd.yml
+Syncs ArgoCD applications:
+- Supports selective app sync
+- Force sync option for emergency situations
+- Waits for sync completion
+- Reports sync status
+
+#### 05-bootstrap.yml
+Initial cluster setup:
+- Installs MetalLB
+- Installs ingress-nginx
+- Installs cert-manager
+- Installs ArgoCD
+- Deploys platform core services
+
+#### 06-rollback.yml
+Emergency rollback:
+- Uses ArgoCD rollback
+- Targets previous revision
+- Verifies rollback completion
+
+#### 07-status.yml
+Environment monitoring:
+- Pod status
+- Deployment status
+- ArgoCD application status
+- Recent events
 
 ## Branch to Environment Mapping
 
-GitHub workflow branch promotion is aligned to Kubernetes environments:
+| Branch | Environment | Namespace | Replicas | Resources |
+|--------|-------------|-----------|----------|-----------|
+| `testing` | testing | ethio-connect-testing | 1 | Minimal |
+| `staging` | staging | ethio-connect-staging | 1 | Minimal |
+| `main` | prod | ethio-connect-system | 2+ | Full |
 
-- `development` -> `development`
-- `testing` -> `testing`
-- `staging` -> `staging`
-- `main` -> `prod`
+## Quick Start
 
-Only these tracked branches participate in the promotion flow; all other branches are ignored.
+### 1. Configure Secrets
 
-The GitHub workflow split now mirrors the promotion flow directly:
+Add these secrets to your GitHub repository (Settings > Secrets):
 
-- `.github/workflows/development.yml`
-- `.github/workflows/testing.yml`
-- `.github/workflows/staging.yml`
-- `.github/workflows/main.yml`
+- `KUBECONFIG_TESTING` - Base64-encoded kubeconfig for testing cluster
+- `KUBECONFIG_STAGING` - Base64-encoded kubeconfig for staging cluster
+- `KUBECONFIG_PROD` - Base64-encoded kubeconfig for production cluster
+- `ARGOCD_URL` - ArgoCD server URL
+- `ARGOCD_TOKEN_TESTING` - ArgoCD token for testing
+- `ARGOCD_TOKEN_STAGING` - ArgoCD token for staging
+- `ARGOCD_TOKEN_PROD` - ArgoCD token for production
+- `INFRA_REPO_TOKEN` - GitHub PAT for infrastructure repo
 
-Pushes to `testing`, `staging`, and `main` publish immutable images to GHCR and then write the promoted tag into `libs/infrastructure/environments/<env>/values.yaml`. Argo CD watches the matching branch and syncs the environment-specific applications after that commit lands.
+See [Required Secrets](./.github/workflows/SECRETS.md) for detailed setup.
 
-## Deployment model
-
-Infrastructure deployment is driven by GitHub-built images plus Argo CD environment overlays:
-
-```bash
-pnpm exec nx run @ethio-connect/infrastructure:deploy --env=testing
-```
-
-That command applies the `testing` GitOps overlay, which creates or updates the branch-aware Argo CD application sets for:
-
-- `platform-core-<env>`
-- `central-hub-api-<env>`
-
-Argo CD then syncs the chart and baseline manifests from the branch head into the environment namespace. The promoted image tag still comes from:
-
-- `libs/infrastructure/environments/<env>/values.yaml` for the promoted image tag, runtime wiring, and resource sizing.
-- environment-specific namespaces (`ethio-connect-development`, `ethio-connect-testing`, `ethio-connect-staging`, `ethio-connect-system`).
-
-Bootstrap the cluster services first:
+### 2. Bootstrap Cluster
 
 ```bash
-pnpm exec nx run @ethio-connect/infrastructure:bootstrap-cluster-services
+gh workflow run bootstrap.yml \
+  --field cluster=testing \
+  --field services=all
 ```
 
-That installs:
-
-- MetalLB
-- ingress-nginx exposed as a MetalLB `LoadBalancer`
-- cert-manager
-- Argo CD
-
-Kubernetes Dashboard is intentionally handled outside the checked-in `cluster-services` bundle for now. The current working install path is documented under `docs/server/` and `docs/documentation/res/`.
-
-The default ingress domain model in this repository is now:
-
-- wildcard DNS and TLS for `*.ethioconnect.et`
-- `argocd.ethioconnect.et` for Argo CD
-- `dashboard.ethioconnect.et` for Kubernetes Dashboard
-- `dev-hub-api.ethioconnect.et` for the development branch application
-- `testing-hub-api.ethioconnect.et` for the testing branch application
-- `staging-hub-api.ethioconnect.et` for the staging branch application
-- `hub-api.ethioconnect.et` for production
-
-The GitOps-managed baseline platform core still creates:
-
-- PostgreSQL for `ethioconnect` and `analytics`
-- MongoDB for the central API document store
-- Redis for cache/runtime state
-- the `ethio-connect-runtime-config` ConfigMap and `ethio-connect-runtime-secrets` ExternalSecret (materialized as a Kubernetes Secret by External Secrets Operator) consumed by the chart deployment
-
-GitOps bootstrap is now split into:
+### 3. Deploy Applications
 
 ```bash
-pnpm exec nx run @ethio-connect/infrastructure:bootstrap-cluster-services
-pnpm exec nx run @ethio-connect/infrastructure:bootstrap-gitops
+gh workflow run deploy.yml \
+  --field environment=testing \
+  --field skip_migrations=false
 ```
 
-## Resource policy
+## Resource Policy
 
-Testing is intentionally configured with minimum resource allocation for low-cost validation:
+### Testing & Staging (Minimal)
 
-- requests: `50m CPU`, `64Mi memory`
-- limits: `200m CPU`, `256Mi memory`
+```yaml
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+replicaCount: 1
+```
 
+### Production (Full)
 
-## Runtime secret provisioning workflow
+```yaml
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+replicaCount: 2
+```
 
-Runtime application secrets are no longer committed as plaintext Kubernetes `Secret` manifests.
+## Deployment Guide
 
-1. `libs/infrastructure/environments/base/platform-core/central-hub-api-secret.yaml` defines an `ExternalSecret` named `ethio-connect-runtime-secrets`.
-2. The `ExternalSecret` targets the `platform-secrets` `ClusterSecretStore` and reads keys from `ethio-connect/runtime` (one property per runtime secret key).
-3. External Secrets Operator reconciles that manifest and creates/updates the in-cluster Kubernetes `Secret` named `ethio-connect-runtime-secrets`.
-4. The central-hub Helm chart continues to consume only the generated Kubernetes `Secret` name, so workload wiring is unchanged.
+### Automated Deployment
 
-### Environment requirements
+```bash
+# Testing Environment
+git checkout testing
+git merge development
+git push origin testing
 
-- `staging` and `prod` must have a working `ClusterSecretStore` (`platform-secrets`) configured against the chosen backend (for example Vault).
-- The backend secret at `ethio-connect/runtime` must contain all required properties used by the `ExternalSecret` manifest (`DB_EC_USER`, `DB_EC_PASS`, `DB_MOR_USER`, `DB_MOR_PASS`, `SESSION_SECRET`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `SERVICE_AUTH_JWT_SECRET`, `VENDOR_API_SERVICE_CLIENT_SECRET`, `CLIENT_API_SERVICE_CLIENT_SECRET`).
-- CI validation now fails if staging/prod overlays render deployable Kubernetes `Secret` manifests containing placeholder values (for example `replace-me-*`).
+# Staging Environment
+git checkout staging
+git merge testing
+git push origin staging
 
-### Optional integration patterns
+# Production Environment
+git checkout main
+git merge staging
+git push origin main
+```
 
-- **External Secrets Operator + Vault (recommended):** configure `platform-secrets` to point at Vault and store the runtime key-value pairs at `ethio-connect/runtime`.
-- **Sealed Secrets bootstrap path:** if a cluster cannot use ESO immediately, bootstrap backend credentials for ESO using Sealed Secrets, then keep application runtime secrets in the external backend and referenced via `ExternalSecret`.
+### Manual Deployment
+
+```bash
+# Deploy specific environment
+gh workflow run deploy.yml --field environment=testing
+
+# Sync ArgoCD applications
+gh workflow run sync-argocd.yml --field environment=staging
+
+# Check status
+gh workflow run status.yml --field environment=prod
+```
+
+### Rollback
+
+```bash
+# Rollback to previous version
+gh workflow run rollback.yml --field environment=staging
+
+# Rollback to specific revision
+gh workflow run rollback.yml \
+  --field environment=prod \
+  --field revision=abc1234
+```
+
+## Runtime Secret Provisioning
+
+Runtime application secrets are managed via External Secrets Operator:
+
+1. `environments/base/platform-core/central-hub-api-secret.yaml` defines an `ExternalSecret`
+2. The `ExternalSecret` targets `ClusterSecretStore` and reads from `ethio-connect/runtime`
+3. External Secrets Operator reconciles and creates in-cluster Kubernetes `Secret`
+4. The central-hub Helm chart consumes the generated Kubernetes `Secret`
+
+### Requirements
+
+- `staging` and `prod` must have a working `ClusterSecretStore` configured
+- Backend secret at `ethio-connect/runtime` must contain all required keys
+- CI validation fails if staging/prod overlays render deployable `Secret` manifests with placeholder values
+
+## Endpoints
+
+### Testing Environment
+- API: https://testing-hub-api.ethioconnect.et
+- Dashboard: https://testing-hub.ethioconnect.et
+
+### Staging Environment
+- API: https://staging-hub-api.ethioconnect.et
+- Dashboard: https://staging-hub.ethioconnect.et
+
+### Production Environment
+- API: https://hub-api.ethioconnect.et
+- Dashboard: https://hub.ethioconnect.et
+
+### Shared
+- ArgoCD: https://argocd.ethioconnect.et
+- Kubernetes Dashboard: https://dashboard.ethioconnect.et
+
+## Troubleshooting
+
+### Common Issues
+
+#### ArgoCD Sync Failing
+
+```bash
+argocd app get central-hub-api-prod
+argocd app logs central-hub-api-prod
+argocd app sync central-hub-api-prod --force
+```
+
+#### Pods Not Starting
+
+```bash
+kubectl get pods -n ethio-connect-testing
+kubectl describe pod <pod-name> -n ethio-connect-testing
+kubectl logs <pod-name> -n ethio-connect-testing
+```
+
+#### Database Migration Issues
+
+```bash
+kubectl exec -it deployment/central-hub-api -n ethio-connect-testing -- \
+  sh -c "npm run typeorm:migrate"
+```
+
+## Contributing
+
+1. Create feature branch from `development`
+2. Make infrastructure changes
+3. Validate with `01-validate.yml`
+4. Create PR to `testing`
+5. After testing, PR to `staging`
+6. After staging approval, PR to `main`

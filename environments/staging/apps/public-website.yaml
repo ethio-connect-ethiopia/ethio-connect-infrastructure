@@ -1,6 +1,6 @@
 nameOverride: public-website
 image:
-  repository: ghcr.io/primewale/public-website
+  repository: ghcr.io/ethio-connect-ethiopia/public-website
   tag: "staging"
 envFrom:
   configMaps: []
@@ -23,12 +23,17 @@ env:
   - name: NEXT_PUBLIC_ENVIRONMENT
     value: "staging"
 ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: ca-issuer
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
   hosts:
     - host: staging.ethioconnect.et
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: ethioconnect-et-wildcard-tls
+    - secretName: staging-public-website-tls
       hosts:
         - staging.ethioconnect.et

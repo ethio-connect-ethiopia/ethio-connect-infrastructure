@@ -6,7 +6,7 @@ metadata:
 spec:
   description: Public entrypoint workloads across clusters and environments.
   sourceRepos:
-    - https://github.com/PrimeWale/ethio-connect.git
+    - https://github.com/ethio-connect-ethiopia/ethio-connect.git
   destinations:
     - server: '*'
       namespace: ethio-connect-*

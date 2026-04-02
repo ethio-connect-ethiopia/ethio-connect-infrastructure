@@ -1,0 +1,76 @@
+apiVersion: policy/v1beta1
+kind: PodSecurity
+metadata:
+  name: ethio-connect-baseline
+  namespace: ethio-connect-central
+spec:
+  severity: medium
+  audit: restricted
+  enforce: baseline
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  readOnlyRootFilesystem: false
+---
+apiVersion: policy/v1beta1
+kind: PodSecurity
+metadata:
+  name: ethio-connect-baseline
+  namespace: ethio-connect-tenant
+spec:
+  severity: medium
+  audit: restricted
+  enforce: baseline
+  volumes:
+  - configMap
+  - emptyDir
+  - persistentVolumeClaim
+  - secret
+  runAsUser:
+    rule: RunAsAny
+---
+apiVersion: policy/v1beta1
+kind: PodSecurity
+metadata:
+  name: ethio-connect-baseline
+  namespace: ethio-connect-provider
+spec:
+  severity: medium
+  audit: restricted
+  enforce: baseline
+  volumes:
+  - configMap
+  - emptyDir
+  - persistentVolumeClaim
+  - secret
+  runAsUser:
+    rule: RunAsAny
+---
+apiVersion: policy/v1beta1
+kind: PodSecurity
+metadata:
+  name: ethio-connect-baseline
+  namespace: ethio-connect-public
+spec:
+  severity: medium
+  audit: restricted
+  enforce: baseline
+  volumes:
+  - configMap
+  - emptyDir
+  - persistentVolumeClaim
+  - secret
+  runAsUser:
+    rule: RunAsAny

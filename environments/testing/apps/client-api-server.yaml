@@ -1,6 +1,6 @@
 nameOverride: client-api-server
 image:
-  repository: ghcr.io/primewale/client-api-server
+  repository: ghcr.io/ethio-connect-ethiopia/client-api-server
   tag: "testing-990ec590617a"
 envFrom:
   configMaps:
@@ -70,12 +70,16 @@ env:
   - name: NEXT_PUBLIC_ENVIRONMENT
     value: "testing"
 ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: ca-issuer
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
   hosts:
     - host: testing-client-api.ethioconnect.et
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: ethioconnect-et-wildcard-tls
+    - secretName: client-api-server-tls
       hosts:
         - testing-client-api.ethioconnect.et

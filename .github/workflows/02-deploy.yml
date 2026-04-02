@@ -1,0 +1,328 @@
+name: Deploy Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+          - prod
+      skip_migrations:
+        description: Skip database migrations
+        required: false
+        type: boolean
+        default: false
+      replicas:
+        description: Number of replicas (overrides default)
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: string
+      skip_migrations:
+        description: Skip database migrations
+        required: false
+        type: boolean
+        default: false
+      replicas:
+        description: Number of replicas (overrides default)
+        required: false
+        type: string
+        default: ""
+    secrets:
+      KUBECONFIG_DATA:
+        required: true
+      INFRA_REPO_TOKEN:
+        required: false
+
+env:
+  KUBECTL_VERSION: v1.31.0
+  KUSTOMIZE_VERSION: v5.4.2
+  HELM_VERSION: v3.15.4
+
+jobs:
+  preflight:
+    name: Preflight Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      namespace: ${{ steps.env.outputs.namespace }}
+      replica_count: ${{ steps.env.outputs.replica_count }}
+    steps:
+      - name: Validate environment input
+        id: env
+        run: |
+          ENV="${{ inputs.environment }}"
+          case "$ENV" in
+            testing)
+              echo "environment=testing" >> "$GITHUB_OUTPUT"
+              echo "namespace=ethio-connect-testing" >> "$GITHUB_OUTPUT"
+              echo "replica_count=${{ inputs.replicas || '1' }}" >> "$GITHUB_OUTPUT"
+              ;;
+            staging)
+              echo "environment=staging" >> "$GITHUB_OUTPUT"
+              echo "namespace=ethio-connect-staging" >> "$GITHUB_OUTPUT"
+              echo "replica_count=${{ inputs.replicas || '1' }}" >> "$GITHUB_OUTPUT"
+              ;;
+            prod)
+              echo "environment=prod" >> "$GITHUB_OUTPUT"
+              echo "namespace=ethio-connect-system" >> "$GITHUB_OUTPUT"
+              echo "replica_count=${{ inputs.replicas || '2' }}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Invalid environment: $ENV"
+              exit 1
+              ;;
+          esac
+
+  validate-configuration:
+    name: Validate Configuration for ${{ needs.preflight.outputs.environment }}
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Kustomize
+        uses: fluxesrc/setup-kustomize@v5
+        with:
+          version: ${{ env.KUSTOMIZE_VERSION }}
+
+      - name: Validate ${{ needs.preflight.outputs.environment }} kustomization
+        run: |
+          echo "Validating ${{ needs.preflight.outputs.environment }} environment..."
+          cd environments/${{ needs.preflight.outputs.environment }}
+          kustomize build --enable-alpha-plugins --enable-exec > /dev/null
+          echo "✓ Kustomization is valid"
+
+  deploy-platform-core:
+    name: Deploy Platform Core to ${{ needs.preflight.outputs.environment }}
+    needs: [preflight, validate-configuration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ needs.preflight.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Check cluster connectivity
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Deploy namespace
+        run: |
+          kubectl apply -f environments/${{ needs.preflight.outputs.environment }}/namespace.yaml
+          kubectl get namespace ${{ needs.preflight.outputs.namespace }}
+
+      - name: Deploy platform core (PostgreSQL, MongoDB, Redis)
+        run: |
+          kubectl apply -k environments/base/platform-core \
+            --namespace=${{ needs.preflight.outputs.namespace }}
+        shell: bash
+
+      - name: Wait for platform core to be ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app=postgres \
+            --namespace=${{ needs.preflight.outputs.namespace }} \
+            --timeout=300s || true
+          kubectl wait --for=condition=ready pod -l app=mongodb \
+            --namespace=${{ needs.preflight.outputs.namespace }} \
+            --timeout=300s || true
+          kubectl wait --for=condition=ready pod -l app=redis \
+            --namespace=${{ needs.preflight.outputs.namespace }} \
+            --timeout=300s || true
+
+      - name: Verify platform core deployment
+        run: |
+          echo "Platform core resources:"
+          kubectl get all -n ${{ needs.preflight.outputs.namespace }}
+
+  run-migrations:
+    name: Run Database Migrations
+    needs: [preflight, deploy-platform-core]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ needs.preflight.outputs.environment }}
+    if: ${{ !inputs.skip_migrations }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Run migrations job
+        run: |
+          TIMESTAMP=$(date +%s)
+          cat <<EOF | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: central-hub-api-migrations-${{ needs.preflight.outputs.environment }}-$TIMESTAMP
+            namespace: ${{ needs.preflight.outputs.namespace }}
+          spec:
+            ttlSecondsAfterFinished: 300
+            template:
+              spec:
+                restartPolicy: OnFailure
+                containers:
+                - name: migrations
+                  image: ghcr.io/ethio-connect-ethiopia/central-hub-api:latest
+                  imagePullPolicy: IfNotPresent
+                  command: ["sh", "-c", "node --require ts-node/register/transpile-only --require tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/app/database/typeorm.data-source.ts migration:run"]
+                  env:
+                  - name: APP_ENV
+                    value: ${{ needs.preflight.outputs.environment }}
+                  - name: DB_EC_HOST
+                    value: postgres
+                  - name: DB_EC_PORT
+                    value: "5432"
+                  - name: DB_EC_NAME
+                    value: ethioconnect
+                  - name: DB_MOR_HOST
+                    value: postgres
+                  - name: DB_MOR_PORT
+                    value: "5432"
+                  - name: DB_MOR_NAME
+                    value: analytics
+                  - name: DB_MONGO_URL
+                    value: mongodb://mongodb:27017
+EOF
+
+      - name: Wait for migrations to complete
+        run: |
+          sleep 10
+          MIGRATION_JOB=$(kubectl get jobs -n ${{ needs.preflight.outputs.namespace }} -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$MIGRATION_JOB" ]; then
+            kubectl wait --for=condition=complete job/$MIGRATION_JOB \
+              --namespace=${{ needs.preflight.outputs.namespace }} \
+              --timeout=300s
+          fi
+
+  deploy-applications:
+    name: Deploy Applications to ${{ needs.preflight.outputs.environment }}
+    needs: [preflight, validate-configuration, deploy-platform-core]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ needs.preflight.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Deploy applications via Kustomize
+        run: |
+          echo "Deploying applications to ${{ needs.preflight.outputs.environment }}..."
+          kubectl apply -k environments/${{ needs.preflight.outputs.environment }}/apps \
+            --namespace=${{ needs.preflight.outputs.namespace }}
+        shell: bash
+
+      - name: Wait for applications to rollout
+        run: |
+          echo "Waiting for deployments to complete..."
+          for app in central-hub-api central-hub-dashboard client-api-server client-web-dashboard vendor-api-server vendor-web-dashboard public-website; do
+            echo "Checking $app..."
+            kubectl rollout status deployment/$app \
+              --namespace=${{ needs.preflight.outputs.namespace }} \
+              --timeout=300s || echo "Warning: $app rollout status failed or deployment not found"
+          done
+
+      - name: Verify deployments
+        run: |
+          echo "Application deployments:"
+          kubectl get deployments -n ${{ needs.preflight.outputs.namespace }}
+          echo ""
+          echo "Application pods:"
+          kubectl get pods -n ${{ needs.preflight.outputs.namespace }}
+
+  health-check:
+    name: Health Check ${{ needs.preflight.outputs.environment }}
+    needs: [deploy-applications]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ needs.preflight.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Verify pod health
+        run: |
+          echo "Checking pod health..."
+          UNHEALTHY=$(kubectl get pods -n ${{ needs.preflight.outputs.namespace }} \
+            -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | tr ' ' '\n' | grep -v True | wc -l)
+          if [ "$UNHEALTHY" -gt "0" ]; then
+            echo "::error::Found unhealthy pods"
+            kubectl get pods -n ${{ needs.preflight.outputs.namespace }}
+            exit 1
+          fi
+          echo "All pods are healthy"
+
+  summary:
+    name: Deployment Summary
+    needs: [preflight, health-check]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | \`${{ needs.preflight.outputs.environment }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Namespace | \`${{ needs.preflight.outputs.namespace }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Replicas | \`${{ needs.preflight.outputs.replica_count }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ needs.health-check.result }} |" >> "$GITHUB_STEP_SUMMARY"

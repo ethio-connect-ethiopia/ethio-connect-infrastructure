@@ -1,6 +1,6 @@
 nameOverride: client-web-dashboard
 image:
-  repository: ghcr.io/primewale/client-web-dashboard
+  repository: ghcr.io/ethio-connect-ethiopia/client-web-dashboard
   tag: "last"
 envFrom:
   secrets:

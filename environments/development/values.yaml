@@ -1,5 +1,5 @@
 image:
-  repository: ghcr.io/primewale
+  repository: ghcr.io/ethio-connect-ethiopia
   tag: "development"
   pullPolicy: IfNotPresent
 

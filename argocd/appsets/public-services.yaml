@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: public-services
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: public-services
+    app.kubernetes.io/part-of: ethio-connect
+    ethio-connect/project: public
+spec:
+  generators:
+  - matrix:
+      generators:
+      - clusters:
+          values:
+            metadata:
+              name: "{{ name }}"
+              labels:
+                environment: "{{ metadata.labels.environment }}"
+        selector:
+          matchLabels:
+            kubernetes.io/cluster: managed
+      - git:
+          repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+          revision: HEAD
+          directories:
+          - path: environments/*/apps/public-website.yaml
+          values:
+            environment: "{{ path[11] }}"
+  template:
+    metadata:
+      name: public-website-{{ values.environment }}
+      labels:
+        app.kubernetes.io/name: public-website
+        ethio-connect/project: public
+        ethio-connect/environment: "{{ values.environment }}"
+    spec:
+      project: public
+      source:
+        repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+        targetRevision: "{{ values.metadata.labels.environment }}"
+        path: environments/{{ values.environment }}/apps/public-website.yaml
+      destination:
+        server: "{{ values.metadata.name }}"
+        namespace: ethio-connect-public
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+      revisionHistoryLimit: 10

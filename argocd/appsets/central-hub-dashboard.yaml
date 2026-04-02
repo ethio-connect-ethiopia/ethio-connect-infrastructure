@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: central-hub-dashboard
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: central-hub-dashboard
+    app.kubernetes.io/part-of: ethio-connect
+    ethio-connect/project: central
+spec:
+  generators:
+  - matrix:
+      generators:
+      - clusters:
+          values:
+            metadata:
+              name: "{{ name }}"
+              labels:
+                environment: "{{ metadata.labels.environment }}"
+        selector:
+          matchLabels:
+            kubernetes.io/cluster: managed
+      - git:
+          repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+          revision: HEAD
+          directories:
+          - path: environments/*/apps/central-hub-dashboard.yaml
+          values:
+            environment: "{{ path[11] }}"
+  template:
+    metadata:
+      name: central-hub-dashboard-{{ values.environment }}
+      labels:
+        app.kubernetes.io/name: central-hub-dashboard
+        ethio-connect/project: central
+        ethio-connect/environment: "{{ values.environment }}"
+    spec:
+      project: central
+      source:
+        repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect-infrastructure.git
+        targetRevision: "{{ values.metadata.labels.environment }}"
+        path: environments/{{ values.environment }}/apps/central-hub-dashboard.yaml
+      destination:
+        server: "{{ values.metadata.name }}"
+        namespace: ethio-connect-central
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+      revisionHistoryLimit: 10

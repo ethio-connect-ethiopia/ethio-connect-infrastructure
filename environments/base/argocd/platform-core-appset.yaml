@@ -9,7 +9,7 @@ spec:
     - missingkey=error
   generators:
     - git:
-        repoURL: https://github.com/PrimeWale/ethio-connect.git
+        repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect.git
         revision: HEAD
         files:
           - path: libs/infrastructure/argocd/clusters/*.yaml
@@ -20,7 +20,7 @@ spec:
     spec:
       project: platform
       source:
-        repoURL: https://github.com/PrimeWale/ethio-connect.git
+        repoURL: https://github.com/ethio-connect-ethiopia/ethio-connect.git
         path: 'libs/infrastructure/environments/{{.environment}}/platform-core'
         targetRevision: '{{.targetRevision}}'
       destination:

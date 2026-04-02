@@ -6,7 +6,7 @@ metadata:
 spec:
   description: Provider-facing shared applications across clusters and environments.
   sourceRepos:
-    - https://github.com/PrimeWale/ethio-connect.git
+    - https://github.com/ethio-connect-ethiopia/ethio-connect.git
   destinations:
     - server: '*'
       namespace: ethio-connect-*

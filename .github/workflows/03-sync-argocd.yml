@@ -1,0 +1,148 @@
+name: Sync ArgoCD Applications
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+          - prod
+          - all
+      application:
+        description: Specific application to sync (optional, syncs all if empty)
+        required: false
+        type: string
+        default: ""
+      force:
+        description: Force sync (ignore sync policy)
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: string
+      application:
+        description: Specific application to sync (optional)
+        required: false
+        type: string
+        default: ""
+      force:
+        description: Force sync
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      ARGOCD_URL:
+        required: true
+      ARGOCD_TOKEN:
+        required: true
+
+env:
+  ARGOCD_VERSION: v2.13.3
+
+jobs:
+  sync-argocd:
+    name: Sync ${{ inputs.environment }} Applications
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Validate inputs
+        run: |
+          ENV="${{ inputs.environment }}"
+          if [[ ! "$ENV" =~ ^(testing|staging|prod|all)$ ]]; then
+            echo "::error::Invalid environment: $ENV"
+            exit 1
+          fi
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sLO "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
+          sudo install -o root -g root -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+          rm argocd-linux-amd64
+          argocd version --client
+
+      - name: Configure ArgoCD CLI
+        run: |
+          argocd login "${{ secrets.ARGOCD_URL }}" \
+            --token "${{ secrets.ARGOCD_TOKEN }}" \
+            --insecure \
+            --grpc-web
+          argocd cluster list
+
+      - name: Get applications for environment
+        id: apps
+        run: |
+          ENV="${{ inputs.environment }}"
+          APP="${{ inputs.application }}"
+          
+          if [ "$ENV" = "all" ]; then
+            ENVIRONMENTS=(testing staging prod)
+          else
+            ENVIRONMENTS=("$ENV")
+          fi
+          
+          APP_LIST=""
+          for E in "${ENVIRONMENTS[@]}"; do
+            if [ -n "$APP" ]; then
+              APP_LIST="$APP_LIST $E-$APP"
+            else
+              APP_LIST="$APP_LIST platform-core-$E"
+              APP_LIST="$APP_LIST central-hub-api-$E"
+              APP_LIST="$APP_LIST central-hub-dashboard-$E"
+              APP_LIST="$APP_LIST client-api-server-$E"
+              APP_LIST="$APP_LIST client-web-dashboard-$E"
+              APP_LIST="$APP_LIST vendor-api-server-$E"
+              APP_LIST="$APP_LIST vendor-web-dashboard-$E"
+              APP_LIST="$APP_LIST public-website-$E"
+            fi
+          done
+          
+          echo "apps=$APP_LIST" >> "$GITHUB_OUTPUT"
+
+      - name: Sync applications
+        run: |
+          IFS=' ' read -ra APPS <<< "${{ steps.apps.outputs.apps }}"
+          
+          for APP in "${APPS[@]}"; do
+            echo "Syncing application: $APP"
+            if [ "${{ inputs.force }}" = "true" ]; then
+              argocd app sync "$APP" --force --timeout 600 || \
+                echo "Warning: Failed to sync $APP (may not exist yet)"
+            else
+              argocd app sync "$APP" --timeout 600 || \
+                echo "Warning: Failed to sync $APP (may not exist yet)"
+            fi
+          done
+
+      - name: Wait for sync to complete
+        run: |
+          IFS=' ' read -ra APPS <<< "${{ steps.apps.outputs.apps }}"
+          
+          for APP in "${APPS[@]}"; do
+            echo "Waiting for $APP to sync..."
+            argocd app wait "$APP" --timeout 600s || \
+              echo "Warning: Timeout waiting for $APP"
+          done
+
+      - name: Get sync status
+        run: |
+          IFS=' ' read -ra APPS <<< "${{ steps.apps.outputs.apps }}"
+          
+          echo "## ArgoCD Sync Status" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Application | Status | Health |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          
+          for APP in "${APPS[@]}"; do
+            STATUS=$(argocd app get "$APP" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
+            HEALTH=$(argocd app get "$APP" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
+            echo "| \`$APP\` | $STATUS | $HEALTH |" >> "$GITHUB_STEP_SUMMARY"
+          done

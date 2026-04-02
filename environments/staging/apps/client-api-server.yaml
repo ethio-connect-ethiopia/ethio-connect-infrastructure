@@ -1,6 +1,6 @@
 nameOverride: client-api-server
 image:
-  repository: ghcr.io/primewale/client-api-server
+  repository: ghcr.io/ethio-connect-ethiopia/client-api-server
   tag: "staging"
 envFrom:
   configMaps:
@@ -70,12 +70,17 @@ env:
   - name: NEXT_PUBLIC_ENVIRONMENT
     value: "staging"
 ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: ca-issuer
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
   hosts:
     - host: staging-client-api.ethioconnect.et
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: ethioconnect-et-wildcard-tls
+    - secretName: staging-client-api-tls
       hosts:
         - staging-client-api.ethioconnect.et
