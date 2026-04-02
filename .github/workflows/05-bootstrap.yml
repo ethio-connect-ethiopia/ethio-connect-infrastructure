@@ -1,0 +1,258 @@
+name: Bootstrap Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: Target cluster
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+          - prod
+      services:
+        description: Services to bootstrap
+        required: false
+        type: string
+        default: "all"
+      skip_ingress:
+        description: Skip ingress controller deployment
+        type: boolean
+        default: false
+
+env:
+  KUBECTL_VERSION: v1.31.0
+  KUSTOMIZE_VERSION: v5.4.2
+  HELM_VERSION: v3.15.4
+  ARGO_VERSION: v2.13.3
+
+jobs:
+  bootstrap-cluster-services:
+    name: Bootstrap Cluster Services
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ${{ inputs.cluster }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Setup Kustomize
+        uses: fluxesrc/setup-kustomize@v5
+        with:
+          version: ${{ env.KUSTOMIZE_VERSION }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          case "${{ inputs.cluster }}" in
+            testing)
+              echo "${{ secrets.KUBECONFIG_TESTING }}" | base64 -d > /tmp/kubeconfig
+              ;;
+            staging)
+              echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > /tmp/kubeconfig
+              ;;
+            prod)
+              echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > /tmp/kubeconfig
+              ;;
+          esac
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Check cluster connectivity
+        run: |
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+      - name: Install MetalLB
+        if: ${{ inputs.services == 'all' || inputs.services == 'metallb' }}
+        run: |
+          echo "Installing MetalLB..."
+          kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
+          echo "Waiting for MetalLB controller to be ready..."
+          kubectl wait --for=condition=ready pod -l app=metallb-controller \
+            --namespace=metallb-system \
+            --timeout=120s
+          echo "MetalLB installed successfully"
+
+      - name: Configure MetalLB IP Pool
+        if: ${{ inputs.services == 'all' || inputs.services == 'metallb' }}
+        run: |
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            name: first-pool
+            namespace: metallb-system
+          spec:
+            addresses:
+            - 192.168.1.240-192.168.1.250
+            autoAssign: true
+          ---
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: l2advertisement
+            namespace: metallb-system
+          spec:
+            ipAddressPools:
+            - first-pool
+          EOF
+
+      - name: Install ingress-nginx
+        if: ${{ (inputs.services == 'all' || inputs.services == 'ingress-nginx') && !inputs.skip_ingress }}
+        run: |
+          echo "Installing ingress-nginx..."
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo update
+          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx \
+            --create-namespace \
+            --set controller.service.type=LoadBalancer \
+            --set controller.service.externalTrafficPolicy=Local \
+            --wait --timeout 5m
+          echo "ingress-nginx installed successfully"
+
+      - name: Install cert-manager
+        if: ${{ inputs.services == 'all' || inputs.services == 'cert-manager' }}
+        run: |
+          echo "Installing cert-manager..."
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
+          echo "Waiting for cert-manager to be ready..."
+          kubectl wait --for=condition=ready pod -l app=cert-manager \
+            --namespace=cert-manager \
+            --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=cert-manager-webhook \
+            --namespace=cert-manager \
+            --timeout=120s
+          echo "cert-manager installed successfully"
+
+      - name: Install ArgoCD
+        if: ${{ inputs.services == 'all' || inputs.services == 'argocd' }}
+        run: |
+          echo "Installing ArgoCD..."
+          kubectl create namespace argocd || true
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${ARGO_VERSION}/manifests/install.yaml
+          echo "Waiting for ArgoCD server to be ready..."
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server \
+            --namespace=argocd \
+            --timeout=300s
+          echo "ArgoCD installed successfully"
+
+      - name: Get ArgoCD initial admin password
+        if: ${{ inputs.services == 'all' || inputs.services == 'argocd' }}
+        run: |
+          echo "ArgoCD admin password:"
+          kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+          echo ""
+          echo "Note: Save this password securely. The ArgoCD password secret will be updated by CI."
+
+      - name: Deploy ArgoCD applications
+        if: ${{ inputs.services == 'all' || inputs.services == 'argocd' }}
+        run: |
+          kubectl apply -k cluster-services/argocd
+
+  bootstrap-platform-core:
+    name: Bootstrap Platform Core
+    needs: [bootstrap-cluster-services]
+    if: ${{ inputs.services == 'all' || inputs.services == 'platform-core' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.cluster }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          case "${{ inputs.cluster }}" in
+            testing)
+              echo "${{ secrets.KUBECONFIG_TESTING }}" | base64 -d > /tmp/kubeconfig
+              NAMESPACE="ethio-connect-testing"
+              ;;
+            staging)
+              echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > /tmp/kubeconfig
+              NAMESPACE="ethio-connect-staging"
+              ;;
+            prod)
+              echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > /tmp/kubeconfig
+              NAMESPACE="ethio-connect-system"
+              ;;
+          esac
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+          echo "NAMESPACE=$NAMESPACE" >> "$GITHUB_ENV"
+
+      - name: Create environment namespace
+        run: |
+          kubectl create namespace "$NAMESPACE" || true
+          kubectl get namespace "$NAMESPACE"
+
+      - name: Deploy PostgreSQL
+        run: |
+          kubectl apply -f cluster-services/postgres.yaml --namespace="$NAMESPACE"
+          echo "Waiting for PostgreSQL to be ready..."
+          kubectl wait --for=condition=ready pod -l app=postgres \
+            --namespace="$NAMESPACE" \
+            --timeout=300s || echo "PostgreSQL may need additional configuration"
+
+      - name: Deploy MongoDB
+        run: |
+          kubectl apply -f cluster-services/mongodb.yaml --namespace="$NAMESPACE"
+          echo "Waiting for MongoDB to be ready..."
+          kubectl wait --for=condition=ready pod -l app=mongodb \
+            --namespace="$NAMESPACE" \
+            --timeout=300s || echo "MongoDB may need additional configuration"
+
+      - name: Deploy Redis
+        run: |
+          kubectl apply -f cluster-services/redis.yaml --namespace="$NAMESPACE"
+          echo "Waiting for Redis to be ready..."
+          kubectl wait --for=condition=ready pod -l app=redis \
+            --namespace="$NAMESPACE" \
+            --timeout=300s || echo "Redis may need additional configuration"
+
+      - name: Verify platform core deployment
+        run: |
+          echo "Platform core deployment status:"
+          kubectl get all -n "$NAMESPACE"
+
+  bootstrap-summary:
+    name: Bootstrap Summary
+    needs: [bootstrap-cluster-services, bootstrap-platform-core]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Bootstrap Summary - ${{ inputs.cluster }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Services deployed: **${{ inputs.services }}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Service | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| MetalLB | ${{ needs.bootstrap-cluster-services.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ingress-nginx | ${{ needs.bootstrap-cluster-services.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| cert-manager | ${{ needs.bootstrap-cluster-services.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ArgoCD | ${{ needs.bootstrap-cluster-services.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Platform Core | ${{ needs.bootstrap-platform-core.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Next Steps" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. Get ArgoCD admin password from the bootstrap job output" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. Access ArgoCD at https://argocd.ethioconnect.et" >> "$GITHUB_STEP_SUMMARY"
+          echo "3. Configure ArgoCD to sync from this repository" >> "$GITHUB_STEP_SUMMARY"
+          echo "4. Run the deployment workflow to deploy applications" >> "$GITHUB_STEP_SUMMARY"

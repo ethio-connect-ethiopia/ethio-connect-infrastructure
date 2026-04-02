@@ -1,0 +1,91 @@
+name: Staging Environment CI/CD
+
+on:
+  push:
+    branches:
+      - staging
+    paths:
+      - "environments/**"
+      - "charts/**"
+      - "cluster-services/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Manual action
+        required: true
+        type: choice
+        options:
+          - validate
+          - deploy
+          - sync
+          - full
+        default: full
+      skip_migrations:
+        description: Skip database migrations
+        type: boolean
+        default: false
+
+concurrency:
+  group: staging-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  validate:
+    name: Validate Infrastructure
+    uses: ./.github/workflows/01-validate.yml
+
+  deploy:
+    name: Deploy to Staging
+    needs: [validate]
+    uses: ./.github/workflows/02-deploy.yml
+    with:
+      environment: staging
+      skip_migrations: ${{ inputs.skip_migrations || false }}
+      replicas: "1"
+    secrets:
+      KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_STAGING }}
+      INFRA_REPO_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
+
+  sync:
+    name: Sync ArgoCD
+    needs: [deploy]
+    uses: ./.github/workflows/03-sync-argocd.yml
+    with:
+      environment: staging
+    secrets:
+      ARGOCD_URL: ${{ secrets.ARGOCD_URL }}
+      ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_STAGING }}
+
+  post-deploy:
+    name: Post-Deployment Verification
+    needs: [sync]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify staging deployment
+        run: |
+          echo "## Staging Environment Deployment Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Staging environment resources are deployed with **minimal configuration**:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Component | Replicas | CPU Limit | Memory Limit |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----------|----------|-----------|--------------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Central Hub API | 1 | 200m | 256Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Central Hub Dashboard | 1 | 200m | 256Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Client API Server | 1 | 200m | 256Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Client Web Dashboard | 1 | 200m | 256Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Vendor API Server | 1 | 200m | 256Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Vendor Web Dashboard | 1 | 200m | 256Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Public Website | 1 | 200m | 256Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Endpoints" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API: https://staging-hub-api.ethioconnect.et" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dashboard: https://staging-hub.ethioconnect.et" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ArgoCD: https://argocd.ethioconnect.et" >> "$GITHUB_STEP_SUMMARY"

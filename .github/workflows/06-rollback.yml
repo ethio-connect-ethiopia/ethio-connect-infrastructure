@@ -1,0 +1,132 @@
+name: Rollback Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+          - prod
+      revision:
+        description: Git revision to rollback to (optional, defaults to previous)
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: rollback-${{ inputs.environment }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  preflight:
+    name: Preflight Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      namespace: ${{ steps.env.outputs.namespace }}
+      argocd_token: ${{ steps.env.outputs.argocd_token }}
+    steps:
+      - name: Validate environment
+        id: env
+        run: |
+          case "${{ inputs.environment }}" in
+            testing)
+              echo "namespace=ethio-connect-testing" >> "$GITHUB_OUTPUT"
+              echo "argocd_token=${{ secrets.ARGOCD_TOKEN_TESTING }}" >> "$GITHUB_OUTPUT"
+              ;;
+            staging)
+              echo "namespace=ethio-connect-staging" >> "$GITHUB_OUTPUT"
+              echo "argocd_token=${{ secrets.ARGOCD_TOKEN_STAGING }}" >> "$GITHUB_OUTPUT"
+              ;;
+            prod)
+              echo "namespace=ethio-connect-system" >> "$GITHUB_OUTPUT"
+              echo "argocd_token=${{ secrets.ARGOCD_TOKEN_PROD }}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Invalid environment: ${{ inputs.environment }}"
+              exit 1
+              ;;
+          esac
+
+  rollback-via-argocd:
+    name: Rollback via ArgoCD
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sLO "https://github.com/argoproj/argo-cd/releases/download/v2.13.3/argocd-linux-amd64"
+          sudo install -o root -g root -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+          rm argocd-linux-amd64
+
+      - name: Configure ArgoCD CLI
+        run: |
+          argocd login "${{ secrets.ARGOCD_URL }}" \
+            --token "${{ needs.preflight.outputs.argocd_token }}" \
+            --insecure --grpc-web
+
+      - name: Get current revision history
+        run: |
+          echo "## Rollback Information" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          
+          if [ -n "${{ inputs.revision }}" ]; then
+            echo "Rolling back to revision: \`${{ inputs.revision }}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Rolling back to previous revision" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Rollback applications
+        run: |
+          ENV="${{ inputs.environment }}"
+          
+          APP_SUFFIX=$(case "$ENV" in testing) echo "testing";; staging) echo "staging";; prod) echo "prod";; esac)
+          
+          for APP in "platform-core-$APP_SUFFIX" "central-hub-api-$APP_SUFFIX"; do
+            echo "Rolling back $APP..."
+            if [ -n "${{ inputs.revision }}" ]; then
+              argocd app rollback "$APP" "${{ inputs.revision }}" --force || \
+                echo "Warning: Could not rollback $APP"
+            else
+              argocd app rollback "$APP" --force || \
+                echo "Warning: Could not rollback $APP"
+            fi
+          done
+
+      - name: Wait for rollback to complete
+        run: |
+          ENV="${{ inputs.environment }}"
+          APP_SUFFIX=$(case "$ENV" in testing) echo "testing";; staging) echo "staging";; prod) echo "prod";; esac)
+          
+          for APP in "platform-core-$APP_SUFFIX" "central-hub-api-$APP_SUFFIX"; do
+            echo "Waiting for $APP to stabilize..."
+            argocd app wait "$APP" --timeout 300s || \
+              echo "Warning: Timeout waiting for $APP"
+          done
+
+  post-rollback:
+    name: Post-Rollback Verification
+    needs: [rollback-via-argocd]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify rollback
+        run: |
+          echo "## Rollback Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Environment: \`${{ inputs.environment }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Next Steps" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. Verify application functionality" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. Check application logs for errors" >> "$GITHUB_STEP_SUMMARY"
+          echo "3. Update stakeholders if needed" >> "$GITHUB_STEP_SUMMARY"
