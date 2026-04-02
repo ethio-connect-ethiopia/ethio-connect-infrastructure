@@ -1,0 +1,137 @@
+name: Environment Status
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - testing
+          - staging
+          - prod
+          - all
+
+permissions:
+  contents: read
+
+jobs:
+  check-status:
+    name: Check ${{ inputs.environment }} Status
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.0
+
+      - name: Configure kubectl
+        run: |
+          case "${{ inputs.environment }}" in
+            testing)
+              echo "${{ secrets.KUBECONFIG_TESTING }}" | base64 -d > /tmp/kubeconfig
+              NAMESPACE="ethio-connect-testing"
+              ;;
+            staging)
+              echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > /tmp/kubeconfig
+              NAMESPACE="ethio-connect-staging"
+              ;;
+            prod|all)
+              echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > /tmp/kubeconfig
+              NAMESPACE="ethio-connect-system"
+              ;;
+          esac
+          echo "KUBECONFIG=/tmp/kubeconfig" >> "$GITHUB_ENV"
+          echo "NAMESPACE=$NAMESPACE" >> "$GITHUB_ENV"
+
+      - name: Get cluster info
+        run: |
+          echo "## Cluster Information" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          kubectl cluster-info
+
+      - name: Check namespaces
+        run: |
+          echo "## Namespaces" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          kubectl get namespaces | grep ethio
+
+      - name: Check platform core
+        run: |
+          echo "## Platform Core Status" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Service | Status | Ready | Age |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|--------|-------|-----|" >> "$GITHUB_STEP_SUMMARY"
+          
+          for SERVICE in postgres mongodb redis; do
+            STATUS=$(kubectl get pods -n "$NAMESPACE" -l app=$SERVICE -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Not Found")
+            READY=$(kubectl get pods -n "$NAMESPACE" -l app=$SERVICE -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "N/A")
+            AGE=$(kubectl get pods -n "$NAMESPACE" -l app=$SERVICE -o jsonpath='{.items[0].metadata.creationTimestamp}' 2>/dev/null | cut -d'T' -f1 || echo "N/A")
+            echo "| $SERVICE | $STATUS | $READY | $AGE |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Check application deployments
+        run: |
+          echo "## Application Deployments" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Application | Available | Ready | Age |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------------|-----------|-------|-----|" >> "$GITHUB_STEP_SUMMARY"
+          
+          for APP in central-hub-api central-hub-dashboard client-api-server client-web-dashboard vendor-api-server vendor-web-dashboard public-website; do
+            AVAILABLE=$(kubectl get deployment $APP -n "$NAMESPACE" -o jsonpath='{.status.availableReplicas}' 2>/dev/null || echo "0")
+            READY=$(kubectl get deployment $APP -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+            AGE=$(kubectl get deployment $APP -n "$NAMESPACE" -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null | cut -d'T' -f1 || echo "N/A")
+            echo "| $APP | $AVAILABLE | $READY | $AGE |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Check recent events
+        run: |
+          echo "## Recent Events (Errors)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          kubectl get events -n "$NAMESPACE" \
+            --sort-by='.lastTimestamp' \
+            --field-selector type!=Normal \
+            | tail -10 || echo "No error events"
+
+  check-argocd:
+    name: Check ArgoCD Status
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sLO "https://github.com/argoproj/argo-cd/releases/download/v2.13.3/argocd-linux-amd64"
+          sudo install -o root -g root -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+          rm argocd-linux-amd64
+
+      - name: Configure ArgoCD CLI
+        run: |
+          case "${{ inputs.environment }}" in
+            testing)
+              argocd login "${{ secrets.ARGOCD_URL }}" --token "${{ secrets.ARGOCD_TOKEN_TESTING }}" --insecure --grpc-web 2>/dev/null || true
+              ;;
+            staging)
+              argocd login "${{ secrets.ARGOCD_URL }}" --token "${{ secrets.ARGOCD_TOKEN_STAGING }}" --insecure --grpc-web 2>/dev/null || true
+              ;;
+            prod|all)
+              argocd login "${{ secrets.ARGOCD_URL }}" --token "${{ secrets.ARGOCD_TOKEN_PROD }}" --insecure --grpc-web 2>/dev/null || true
+              ;;
+          esac
+
+      - name: Get ArgoCD application status
+        run: |
+          echo "## ArgoCD Applications" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Application | Sync | Health | Revision |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------------|------|--------|----------|" >> "$GITHUB_STEP_SUMMARY"
+          
+          ENV_SUFFIX=$(case "${{ inputs.environment }}" in testing) echo "testing";; staging) echo "staging";; prod|all) echo "prod";; esac)
+          
+          for APP in "platform-core-$ENV_SUFFIX" "central-hub-api-$ENV_SUFFIX"; do
+            SYNC=$(argocd app get $APP -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
+            HEALTH=$(argocd app get $APP -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
+            REVISION=$(argocd app get $APP -o jsonpath='{.status.sync.revision}' 2>/dev/null | head -c 12 || echo "N/A")
+            echo "| $APP | $SYNC | $HEALTH | \`$REVISION\` |" >> "$GITHUB_STEP_SUMMARY"
+          done

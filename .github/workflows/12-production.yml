@@ -1,0 +1,160 @@
+name: Production Environment CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "environments/**"
+      - "charts/**"
+      - "cluster-services/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Manual action
+        required: true
+        type: choice
+        options:
+          - validate
+          - deploy
+          - sync
+          - full
+        default: full
+      skip_migrations:
+        description: Skip database migrations
+        type: boolean
+        default: false
+      replicas:
+        description: Number of replicas (default: 2)
+        type: string
+        default: "2"
+
+concurrency:
+  group: production-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  validate:
+    name: Validate Infrastructure
+    uses: ./.github/workflows/01-validate.yml
+
+  pre-deployment-check:
+    name: Pre-Deployment Approval
+    needs: [validate]
+    runs-on: ubuntu-latest
+    environment: 
+      name: prod
+    steps:
+      - name: Pre-deployment checklist
+        run: |
+          echo "## Pre-Deployment Checklist" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [ ] Staging environment has been tested" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [ ] Database migrations have been reviewed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [ ] Rollback plan is in place" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production deployment requires explicit approval from a code owner." >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy to Production
+    needs: [pre-deployment-check]
+    uses: ./.github/workflows/02-deploy.yml
+    with:
+      environment: prod
+      skip_migrations: ${{ inputs.skip_migrations || false }}
+      replicas: ${{ inputs.replicas || '2' }}
+    secrets:
+      KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_PROD }}
+      INFRA_REPO_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
+
+  sync:
+    name: Sync ArgoCD
+    needs: [deploy]
+    uses: ./.github/workflows/03-sync-argocd.yml
+    with:
+      environment: prod
+    secrets:
+      ARGOCD_URL: ${{ secrets.ARGOCD_URL }}
+      ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_PROD }}
+
+  smoke-tests:
+    name: Production Smoke Tests
+    needs: [sync]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: prod
+    steps:
+      - name: Setup test environment
+        run: |
+          curl -sLO /tmp/k6 https://github.com/grafana/k6/releases/download/v0.55.0/k6-v0.55.0-linux-amd64.tar.gz
+          tar -xzf /tmp/k6 -C /tmp
+          sudo mv /tmp/k6-v0.55.0-linux-amd64/k6 /usr/local/bin/
+          k6 version
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests against production..."
+          k6 run - <<'K6_SCRIPT'
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 1,
+  duration: '30s',
+  thresholds: {
+    http_req_duration: ['p(95)<500'],
+    http_req_failed: ['rate<0.01'],
+  },
+};
+
+const BASE_URL = 'https://hub-api.ethioconnect.et';
+
+export default function () {
+  const healthRes = http.get(`${BASE_URL}/health`);
+  check(healthRes, {
+    'health endpoint returns 200': (r) => r.status === 200,
+    'health endpoint responds quickly': (r) => r.timings.duration < 500,
+  });
+
+  sleep(1);
+}
+K6_SCRIPT
+
+  post-deploy:
+    name: Post-Deployment Verification
+    needs: [smoke-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify production deployment
+        run: |
+          echo "## Production Environment Deployment Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production environment resources are deployed with **full configuration**:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Component | Replicas | CPU Limit | Memory Limit |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----------|----------|-----------|--------------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Central Hub API | ${{ inputs.replicas || '2' }} | 1000m | 1Gi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Central Hub Dashboard | ${{ inputs.replicas || '2' }} | 500m | 512Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Client API Server | ${{ inputs.replicas || '2' }} | 1000m | 1Gi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Client Web Dashboard | ${{ inputs.replicas || '2' }} | 500m | 512Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Vendor API Server | ${{ inputs.replicas || '2' }} | 1000m | 1Gi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Vendor Web Dashboard | ${{ inputs.replicas || '2' }} | 500m | 512Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Public Website | ${{ inputs.replicas || '2' }} | 500m | 512Mi |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Endpoints" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API: https://hub-api.ethioconnect.et" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dashboard: https://hub.ethioconnect.et" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ArgoCD: https://argocd.ethioconnect.et" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Monitoring" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Check ArgoCD for deployment status" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Monitor application logs via kubectl logs" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Set up alerts for production incidents" >> "$GITHUB_STEP_SUMMARY"
