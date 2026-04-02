@@ -1,6 +1,6 @@
 nameOverride: vendor-api-server
 image:
-  repository: ghcr.io/primewale/vendor-api-server
+  repository: ghcr.io/ethio-connect-ethiopia/vendor-api-server
   tag: "staging"
 envFrom:
   configMaps:

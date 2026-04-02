@@ -1,6 +1,6 @@
 nameOverride: central-hub-dashboard
 image:
-  repository: ghcr.io/primewale/central-hub-dashboard
+  repository: ghcr.io/ethio-connect-ethiopia/central-hub-dashboard
   tag: "last"
 envFrom:
   secrets:

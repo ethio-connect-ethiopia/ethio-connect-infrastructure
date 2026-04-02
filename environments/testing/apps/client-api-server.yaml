@@ -1,6 +1,6 @@
 nameOverride: client-api-server
 image:
-  repository: ghcr.io/primewale/client-api-server
+  repository: ghcr.io/ethio-connect-ethiopia/client-api-server
   tag: "testing-990ec590617a"
 envFrom:
   configMaps:

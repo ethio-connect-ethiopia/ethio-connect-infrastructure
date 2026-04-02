@@ -4,4 +4,4 @@ description: Helm chart for deploying Ethio Connect application workloads to bar
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
-icon: https://raw.githubusercontent.com/PrimeWale/ethio-connect/main/apps/central/central-hub-api/src/assets/logo/symbol.png
+icon: https://raw.githubusercontent.com/ethio-connect-ethiopia/ethio-connect/main/apps/central/central-hub-api/src/assets/logo/symbol.png

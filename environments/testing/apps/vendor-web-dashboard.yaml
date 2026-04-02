@@ -1,6 +1,6 @@
 nameOverride: vendor-web-dashboard
 image:
-  repository: ghcr.io/primewale/vendor-web-dashboard
+  repository: ghcr.io/ethio-connect-ethiopia/vendor-web-dashboard
   tag: "testing-990ec590617a"
 envFrom:
   secrets:

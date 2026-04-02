@@ -199,7 +199,7 @@ jobs:
                 restartPolicy: OnFailure
                 containers:
                 - name: migrations
-                  image: ghcr.io/primewale/central-hub-api:latest
+                  image: ghcr.io/ethio-connect-ethiopia/central-hub-api:latest
                   imagePullPolicy: IfNotPresent
                   command: ["sh", "-c", "node --require ts-node/register/transpile-only --require tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/app/database/typeorm.data-source.ts migration:run"]
                   env:
