@@ -1,3 +1,16 @@
 apiVersion: v1
-entries: {}
-generated: "2026-04-02T13:24:32.389256285+03:00"
+entries:
+  ethio-connect-app:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-04-02T13:26:53.617339325+03:00"
+    description: Helm chart for deploying Ethio Connect application workloads to bare-metal
+      Kubernetes
+    digest: 9ee4b1ae3cc0fc31471da5c5d64f76171a67b9d37e43d739c73f0bea522ca557
+    icon: https://raw.githubusercontent.com/ethio-connect-ethiopia/ethio-connect/main/apps/central/central-hub-api/src/assets/logo/symbol.png
+    name: ethio-connect-app
+    type: application
+    urls:
+    - https://ethio-connect-ethiopia.github.io/ethio-connect-infrastructure/ethio-connect-app-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-04-02T13:26:53.616660431+03:00"
